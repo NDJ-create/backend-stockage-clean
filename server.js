@@ -1626,17 +1626,17 @@ app.use((req, res) => {
 });
 
 // Server startup
-const PORT = process.env.PORT || 3001;  // Utilise le port défini par Render ou 3001 si non défini
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🚀 Backend démarré sur http://0.0.0.0:${PORT}`);
-});
+
   console.log('Endpoints disponibles:');
   console.log('• GET    /api/licence/validate');
-  console.log('• POST   /api/master/licences/generate (master)');
+  console.log('• POST   /api/master/licences/generate');
   console.log('• POST   /api/master/licences/revoke (master)');
   console.log('• POST   /api/master/licences/mark-used (master)');
   console.log('• GET    /api/master/licences (master)');
-  console.log('• POST   /api/dashboard/licences/generate (dashboard)');
+  console.log('• POST   /api/dashboard/licences/generate');
   console.log('• POST   /api/setup');
   console.log('• POST   /api/login');
   console.log('• POST   /api/verify-password');
@@ -1661,7 +1661,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log('• POST   /api/recettes');
   console.log('• POST   /api/recettes-avec-stock');
   console.log('• DELETE /api/recettes/:id');
-  console.log('• POST   /api/orders/start');  
+  console.log('• POST   /api/orders/start');
   console.log('• GET    /api/mouvements');
   console.log('• GET    /api/alertes');
   console.log('• GET    /api/rapports');
@@ -1672,3 +1672,4 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log('• GET    /api/history');
   console.log('• POST   /api/init');
 });
+
