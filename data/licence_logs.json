@@ -1,0 +1,91 @@
+[
+  {
+    "id": 1,
+    "timestamp": "2025-05-05T23:26:06.270Z",
+    "action": "GENERATE",
+    "licenceId": null,
+    "durationType": "infinite",
+    "expiresAt": null,
+    "client": "MASTER_LICENCE_ADMIN",
+    "key": "LIC-NaN-B21585D3"
+  },
+  {
+    "id": 2,
+    "timestamp": "2025-05-06T02:02:58.354Z",
+    "action": "GENERATE",
+    "licenceId": null,
+    "durationType": "1m",
+    "expiresAt": "2025-06-05T02:02:58.351Z",
+    "client": "Client Test 1 Mois",
+    "key": "LIC-NaN-E97317CE"
+  },
+  {
+    "id": 3,
+    "timestamp": "2025-05-07T15:05:54.757Z",
+    "action": "GENERATE",
+    "licenceId": 1,
+    "durationType": "1m",
+    "expiresAt": "2025-06-06T15:05:54.755Z",
+    "client": "Client Intermédiaire",
+    "key": "LIC-1-732078A4"
+  },
+  {
+    "id": 4,
+    "timestamp": "2025-05-07T20:43:57.543Z",
+    "action": "GENERATE",
+    "licenceId": 2,
+    "durationType": "1y",
+    "expiresAt": "2026-05-07T20:43:57.541Z",
+    "client": "Nouveau Client",
+    "key": "LIC-2-099BF250"
+  },
+  {
+    "id": 5,
+    "timestamp": "2025-05-08T03:08:15.458Z",
+    "action": "GENERATE",
+    "licenceId": 3,
+    "durationType": "1y",
+    "expiresAt": "2026-05-08T03:08:15.455Z",
+    "client": "Client Name",
+    "key": "LIC-3-E70A6650"
+  },
+  {
+    "id": 6,
+    "timestamp": "2025-05-08T13:11:34.929Z",
+    "action": "REVOKE",
+    "key": "LIC-NaN-E97317CE",
+    "revokerId": "system",
+    "reason": "Test",
+    "wasActive": false
+  },
+  {
+    "id": 7,
+    "timestamp": "2025-05-08T16:52:24.781Z",
+    "action": "GENERATE",
+    "licenceId": 4,
+    "durationType": "1y",
+    "expiresAt": "2026-05-08T16:52:24.778Z",
+    "client": "Test Client",
+    "key": "LIC-4-1AFFD54A"
+  },
+  {
+    "id": 8,
+    "timestamp": "2025-05-08T17:14:05.396Z",
+    "action": "GENERATE",
+    "licenceId": 5,
+    "durationType": "1y",
+    "expiresAt": "2026-05-08T17:14:05.394Z",
+    "client": "Test Client",
+    "key": "LIC-5-F9E6C3E3"
+  },
+  {
+    "id": 9,
+    "timestamp": "2025-05-09T11:56:26.088Z",
+    "action": "GENERATE",
+    "licenceId": 6,
+    "durationType": "1y",
+    "expiresAt": "2026-05-09T11:56:26.085Z",
+    "client": "Nouveau Client",
+    "key": "LIC-6-E6B83FC8"
+  }
+]

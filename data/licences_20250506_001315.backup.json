@@ -1,0 +1,36 @@
+{
+  "licences": [
+    {
+      "id": 1,
+      "key": "LIC-1-B21585D3",
+      "clientInfo": {
+        "name": "MASTER_LICENCE_ADMIN",
+        "email": "admin@restaurant.com",
+        "isMaster": true
+      },
+      "createdAt": "2025-05-05T23:26:06.258Z",
+      "expiresAt": null,
+      "isActive": true,
+      "used": false,
+      "usedAt": null,
+      "usedBy": null,
+      "createdBy": "system",
+      "durationType": "infinite"
+    }
+  ],
+  "revokedKeys": [],
+  "usedLicences": [],
+  "logs": {
+    "actions": [],
+    "errors": []
+  },
+  "_meta": {
+    "lastUpdated": "2025-05-05T23:30:00.000Z",
+    "version": "3.0",
+    "settings": {
+      "masterDetectionField": "clientInfo.isMaster",
+      "autoRevokeExpired": false,
+      "logRetentionDays": 30
+    }
+  }
+}

@@ -1,0 +1,709 @@
+{
+  "meta": {
+    "appName": "gestion-stock-restaurant",
+    "version": "2.1"
+  },
+  "system": {
+    "lastUpdate": "2025-04-25T00:35:55.986Z"
+  },
+  "data": {
+    "stock": [
+      {
+        "id": 1,
+        "nom": "Tomates Bio",
+        "quantite": 15,
+        "seuilAlerte": 5,
+        "prixAchat": 2.5
+      },
+      {
+        "id": 2,
+        "nom": "Aubergines",
+        "quantite": 21,
+        "seuilAlerte": 5,
+        "prixAchat": 2.3
+      },
+      {
+        "id": 3,
+        "nom": "Tomates",
+        "quantite": 30,
+        "seuilAlerte": 5,
+        "prixAchat": 1.5,
+        "dateAjout": "2025-04-24T23:07:57.956Z"
+      },
+      {
+        "id": 4,
+        "nom": "Pâtes",
+        "quantite": 48,
+        "seuilAlerte": 5,
+        "prixAchat": 0.8,
+        "categorie": "alimentaire",
+        "dateAjout": "2025-04-25T00:11:29.168Z"
+      }
+    ],
+    "recettes": [
+      {
+        "id": 1,
+        "nom": "Pâtes Simplissimes",
+        "ingredients": [
+          {
+            "id": 4,
+            "quantite": 1
+          }
+        ],
+        "prix": 7.5,
+        "categorie": "autre",
+        "dateCreation": "2025-04-25T00:24:23.818Z"
+      },
+      {
+        "id": 2,
+        "nom": "Salade Méditerranéenne",
+        "ingredients": [
+          {
+            "id": 1,
+            "quantite": 2
+          },
+          {
+            "id": 2,
+            "quantite": 1
+          }
+        ],
+        "prix": 10.5,
+        "categorie": "autre",
+        "dateCreation": "2025-04-25T00:34:06.405Z"
+      },
+      {
+        "id": 3,
+        "nom": "Salade Tomate Simple",
+        "ingredients": [
+          {
+            "id": 3,
+            "quantite": 3
+          }
+        ],
+        "prix": 6,
+        "categorie": "autre",
+        "dateCreation": "2025-04-25T00:34:26.802Z"
+      },
+      {
+        "id": 4,
+        "nom": "Pâtes Gourmandes",
+        "ingredients": [
+          {
+            "id": 4,
+            "quantite": 1
+          },
+          {
+            "id": 1,
+            "quantite": 1
+          },
+          {
+            "id": 2,
+            "quantite": 0.5
+          }
+        ],
+        "prix": 14,
+        "categorie": "autre",
+        "dateCreation": "2025-04-25T00:34:32.541Z"
+      }
+    ],
+    "commandes": [
+      {
+        "id": 1745529249781,
+        "fournisseur": "test@test.com",
+        "productName": "Tomates",
+        "produits": [
+          {
+            "nom": "Tomates",
+            "quantite": 10,
+            "prixUnitaire": 1.2
+          }
+        ],
+        "montant": 12,
+        "statut": "en_attente",
+        "date": "2025-04-24T21:14:09.781Z",
+        "deliveryDate": null,
+        "user": "system"
+      },
+      {
+        "id": 1745529434075,
+        "fournisseur": "fournisseur@test.com",
+        "productName": "Tomates Bio",
+        "produits": [
+          {
+            "nom": "Tomates Bio",
+            "quantite": 15,
+            "prixUnitaire": 2.5
+          }
+        ],
+        "montant": 37.5,
+        "statut": "validée",
+        "date": "2025-04-24T21:17:14.075Z",
+        "deliveryDate": null,
+        "user": "system",
+        "dateValidation": "2025-04-24T21:21:12.768Z"
+      },
+      {
+        "id": 1745531082162,
+        "fournisseur": "primeur@test.com",
+        "productName": "Aubergines",
+        "produits": [
+          {
+            "nom": "Aubergines",
+            "quantite": 7,
+            "prixUnitaire": 2.3
+          }
+        ],
+        "montant": 16.099999999999998,
+        "statut": "validée",
+        "date": "2025-04-24T21:44:42.162Z",
+        "deliveryDate": null,
+        "user": "system",
+        "dateValidation": "2025-04-24T21:49:21.609Z"
+      },
+      {
+        "id": 1745533769724,
+        "fournisseur": "primeur@test.com",
+        "productName": "Aubergines",
+        "produits": [
+          {
+            "nom": "Aubergines",
+            "quantite": 7,
+            "prixUnitaire": 2.3
+          }
+        ],
+        "montant": 16.099999999999998,
+        "statut": "validée",
+        "date": "2025-04-24T22:29:29.724Z",
+        "deliveryDate": null,
+        "user": "system",
+        "dateValidation": "2025-04-24T22:35:24.414Z"
+      },
+      {
+        "id": 1745535963498,
+        "fournisseur": "primeur@test.com",
+        "productName": "Tomates",
+        "produits": [
+          {
+            "nom": "Tomates",
+            "quantite": 10,
+            "prixUnitaire": 1.5
+          }
+        ],
+        "montant": 15,
+        "statut": "validée",
+        "date": "2025-04-24T23:06:03.498Z",
+        "deliveryDate": null,
+        "user": "system",
+        "dateValidation": "2025-04-24T23:07:57.955Z"
+      },
+      {
+        "id": 1745538007335,
+        "fournisseur": "primeur@test.com",
+        "productName": "Tomates",
+        "produits": [
+          {
+            "nom": "Tomates",
+            "quantite": 10,
+            "prixUnitaire": 1.5
+          }
+        ],
+        "montant": 15,
+        "statut": "validée",
+        "date": "2025-04-24T23:40:07.335Z",
+        "deliveryDate": null,
+        "user": "system",
+        "dateValidation": "2025-04-24T23:42:37.191Z"
+      },
+      {
+        "id": 1745538219680,
+        "fournisseur": "primeur@test.com",
+        "productName": "Tomates",
+        "produits": [
+          {
+            "nom": "Tomates",
+            "quantite": 10,
+            "prixUnitaire": 1.5
+          }
+        ],
+        "montant": 15,
+        "statut": "validée",
+        "date": "2025-04-24T23:43:39.680Z",
+        "deliveryDate": null,
+        "user": "system",
+        "dateValidation": "2025-04-24T23:44:43.671Z"
+      }
+    ],
+    "ventes": [
+      {
+        "id": 1,
+        "recetteId": 1,
+        "quantite": 2,
+        "prixTotal": 15,
+        "date": "2025-04-25T00:25:30.895Z",
+        "statut": "validée",
+        "dateValidation": "2025-04-25T00:25:54.212Z",
+        "coutTotal": 1.6,
+        "benefice": 13.4
+      },
+      {
+        "id": 2,
+        "recetteId": 2,
+        "quantite": 2,
+        "prixTotal": 21,
+        "date": "2025-04-25T00:35:49.143Z",
+        "statut": "en_attente"
+      },
+      {
+        "id": 3,
+        "recetteId": 4,
+        "quantite": 1,
+        "prixTotal": 14,
+        "date": "2025-04-25T00:35:55.985Z",
+        "statut": "en_attente"
+      }
+    ],
+    "mouvements": [
+      {
+        "id": 1,
+        "productId": null,
+        "nom": "Tomates Bio",
+        "type": "réapprovisionnement",
+        "quantite": 15,
+        "date": "2025-04-24T21:21:12.768Z",
+        "details": {
+          "source": "commande",
+          "commandeId": 1745529434075
+        }
+      },
+      {
+        "id": 2,
+        "productId": null,
+        "nom": "Aubergines",
+        "type": "réapprovisionnement",
+        "quantite": 7,
+        "date": "2025-04-24T21:49:21.609Z",
+        "details": {
+          "source": "commande",
+          "commandeId": 1745531082162
+        }
+      },
+      {
+        "id": 3,
+        "productId": 2,
+        "nom": "Aubergines",
+        "type": "réapprovisionnement",
+        "quantite": 7,
+        "date": "2025-04-24T22:31:36.869Z",
+        "details": {
+          "source": "commande",
+          "commandeId": 1745533769724
+        }
+      },
+      {
+        "id": 4,
+        "productId": 2,
+        "nom": "Aubergines",
+        "type": "réapprovisionnement",
+        "quantite": 7,
+        "date": "2025-04-24T22:35:24.414Z",
+        "details": {
+          "source": "commande",
+          "commandeId": 1745533769724
+        }
+      },
+      {
+        "id": 5,
+        "productId": 3,
+        "nom": "Tomates",
+        "type": "réapprovisionnement",
+        "quantite": 10,
+        "date": "2025-04-24T23:07:57.956Z",
+        "details": {
+          "source": "commande",
+          "commandeId": 1745535963498,
+          "prixUnitaire": 1.5
+        }
+      },
+      {
+        "id": 6,
+        "productId": 3,
+        "nom": "Tomates",
+        "type": "réapprovisionnement",
+        "quantite": 10,
+        "date": "2025-04-24T23:42:37.191Z",
+        "details": {
+          "source": "commande",
+          "commandeId": 1745538007335,
+          "prixUnitaire": 1.5
+        }
+      },
+      {
+        "id": 7,
+        "productId": 3,
+        "nom": "Tomates",
+        "type": "réapprovisionnement",
+        "quantite": 10,
+        "date": "2025-04-24T23:44:43.671Z",
+        "details": {
+          "source": "commande",
+          "commandeId": 1745538219680,
+          "prixUnitaire": 1.5
+        }
+      },
+      {
+        "id": 8,
+        "productId": 4,
+        "type": "ajout",
+        "quantite": 50,
+        "date": "2025-04-25T00:11:29.168Z",
+        "details": {
+          "source": "ajout manuel",
+          "prixAchat": 0.8
+        }
+      },
+      {
+        "id": 9,
+        "productId": 4,
+        "nom": "Pâtes",
+        "type": "vente",
+        "quantite": -2,
+        "date": "2025-04-25T00:25:54.212Z",
+        "details": {
+          "venteId": 1,
+          "recetteId": 1,
+          "prixAchat": 0.8
+        }
+      }
+    ],
+    "rapports": {
+      "ventes": [
+        {
+          "id": 1,
+          "venteId": 1,
+          "montant": 15,
+          "date": "2025-04-25T00:25:54.212Z"
+        }
+      ],
+      "depenses": [],
+      "benefices": [
+        {
+          "id": 1,
+          "venteId": 1,
+          "montant": 13.4,
+          "date": "2025-04-25T00:25:54.213Z"
+        }
+      ]
+    }
+  },
+  "logs": {
+    "actions": [
+      {
+        "id": 1,
+        "user": "system",
+        "action": "ADD_COMMANDE",
+        "details": {
+          "id": 1745529249781,
+          "fournisseur": "test@test.com",
+          "productName": "Tomates",
+          "produits": [
+            {
+              "nom": "Tomates",
+              "quantite": 10,
+              "prixUnitaire": 1.2
+            }
+          ],
+          "montant": 12,
+          "statut": "en_attente",
+          "date": "2025-04-24T21:14:09.781Z",
+          "deliveryDate": null,
+          "user": "system"
+        },
+        "timestamp": "2025-04-24T21:14:09.783Z"
+      },
+      {
+        "id": 2,
+        "user": "system",
+        "action": "ADD_COMMANDE",
+        "details": {
+          "id": 1745529434075,
+          "fournisseur": "fournisseur@test.com",
+          "productName": "Tomates Bio",
+          "produits": [
+            {
+              "nom": "Tomates Bio",
+              "quantite": 15,
+              "prixUnitaire": 2.5
+            }
+          ],
+          "montant": 37.5,
+          "statut": "en_attente",
+          "date": "2025-04-24T21:17:14.075Z",
+          "deliveryDate": null,
+          "user": "system"
+        },
+        "timestamp": "2025-04-24T21:17:14.077Z"
+      },
+      {
+        "id": 3,
+        "user": "system",
+        "action": "ADD_COMMANDE",
+        "details": {
+          "id": 1745531082162,
+          "fournisseur": "primeur@test.com",
+          "productName": "Aubergines",
+          "produits": [
+            {
+              "nom": "Aubergines",
+              "quantite": 7,
+              "prixUnitaire": 2.3
+            }
+          ],
+          "montant": 16.099999999999998,
+          "statut": "en_attente",
+          "date": "2025-04-24T21:44:42.162Z",
+          "deliveryDate": null,
+          "user": "system"
+        },
+        "timestamp": "2025-04-24T21:44:42.175Z"
+      },
+      {
+        "id": 4,
+        "user": "system",
+        "action": "ADD_COMMANDE",
+        "details": {
+          "id": 1745533769724,
+          "fournisseur": "primeur@test.com",
+          "productName": "Aubergines",
+          "produits": [
+            {
+              "nom": "Aubergines",
+              "quantite": 7,
+              "prixUnitaire": 2.3
+            }
+          ],
+          "montant": 16.099999999999998,
+          "statut": "en_attente",
+          "date": "2025-04-24T22:29:29.724Z",
+          "deliveryDate": null,
+          "user": "system"
+        },
+        "timestamp": "2025-04-24T22:29:29.730Z"
+      },
+      {
+        "id": 5,
+        "user": "system",
+        "action": "ADD_COMMANDE",
+        "details": {
+          "id": 1745535963498,
+          "fournisseur": "primeur@test.com",
+          "productName": "Tomates",
+          "produits": [
+            {
+              "nom": "Tomates",
+              "quantite": 10,
+              "prixUnitaire": 1.5
+            }
+          ],
+          "montant": 15,
+          "statut": "en_attente",
+          "date": "2025-04-24T23:06:03.498Z",
+          "deliveryDate": null,
+          "user": "system"
+        },
+        "timestamp": "2025-04-24T23:06:03.510Z"
+      },
+      {
+        "id": 6,
+        "user": "system",
+        "action": "ADD_COMMANDE",
+        "details": {
+          "id": 1745538007335,
+          "fournisseur": "primeur@test.com",
+          "productName": "Tomates",
+          "produits": [
+            {
+              "nom": "Tomates",
+              "quantite": 10,
+              "prixUnitaire": 1.5
+            }
+          ],
+          "montant": 15,
+          "statut": "en_attente",
+          "date": "2025-04-24T23:40:07.335Z",
+          "deliveryDate": null,
+          "user": "system"
+        },
+        "timestamp": "2025-04-24T23:40:07.350Z"
+      },
+      {
+        "id": 7,
+        "user": "system",
+        "action": "ADD_COMMANDE",
+        "details": {
+          "id": 1745538219680,
+          "fournisseur": "primeur@test.com",
+          "productName": "Tomates",
+          "produits": [
+            {
+              "nom": "Tomates",
+              "quantite": 10,
+              "prixUnitaire": 1.5
+            }
+          ],
+          "montant": 15,
+          "statut": "en_attente",
+          "date": "2025-04-24T23:43:39.680Z",
+          "deliveryDate": null,
+          "user": "system"
+        },
+        "timestamp": "2025-04-24T23:43:39.682Z"
+      },
+      {
+        "id": 8,
+        "user": "system",
+        "action": "ADD_STOCK_ITEM",
+        "details": {
+          "id": 4,
+          "nom": "Pâtes",
+          "quantite": 50,
+          "seuilAlerte": 5,
+          "prixAchat": 0.8,
+          "categorie": "alimentaire",
+          "dateAjout": "2025-04-25T00:11:29.168Z"
+        },
+        "timestamp": "2025-04-25T00:11:29.171Z"
+      },
+      {
+        "id": 9,
+        "user": "system",
+        "action": "ADD_RECETTE",
+        "details": {
+          "id": 1,
+          "nom": "Pâtes Simplissimes",
+          "ingredients": [
+            {
+              "id": 4,
+              "quantite": 1
+            }
+          ],
+          "prix": 7.5,
+          "categorie": "autre",
+          "dateCreation": "2025-04-25T00:24:23.818Z"
+        },
+        "timestamp": "2025-04-25T00:24:23.819Z"
+      },
+      {
+        "id": 10,
+        "user": "system",
+        "action": "ADD_VENTE",
+        "details": {
+          "id": 1,
+          "recetteId": 1,
+          "quantite": 2,
+          "prixTotal": 15,
+          "date": "2025-04-25T00:25:30.895Z",
+          "statut": "en_attente"
+        },
+        "timestamp": "2025-04-25T00:25:30.897Z"
+      },
+      {
+        "id": 11,
+        "user": "system",
+        "action": "ADD_RECETTE",
+        "details": {
+          "id": 2,
+          "nom": "Salade Méditerranéenne",
+          "ingredients": [
+            {
+              "id": 1,
+              "quantite": 2
+            },
+            {
+              "id": 2,
+              "quantite": 1
+            }
+          ],
+          "prix": 10.5,
+          "categorie": "autre",
+          "dateCreation": "2025-04-25T00:34:06.405Z"
+        },
+        "timestamp": "2025-04-25T00:34:06.406Z"
+      },
+      {
+        "id": 12,
+        "user": "system",
+        "action": "ADD_RECETTE",
+        "details": {
+          "id": 3,
+          "nom": "Salade Tomate Simple",
+          "ingredients": [
+            {
+              "id": 3,
+              "quantite": 3
+            }
+          ],
+          "prix": 6,
+          "categorie": "autre",
+          "dateCreation": "2025-04-25T00:34:26.802Z"
+        },
+        "timestamp": "2025-04-25T00:34:26.803Z"
+      },
+      {
+        "id": 13,
+        "user": "system",
+        "action": "ADD_RECETTE",
+        "details": {
+          "id": 4,
+          "nom": "Pâtes Gourmandes",
+          "ingredients": [
+            {
+              "id": 4,
+              "quantite": 1
+            },
+            {
+              "id": 1,
+              "quantite": 1
+            },
+            {
+              "id": 2,
+              "quantite": 0.5
+            }
+          ],
+          "prix": 14,
+          "categorie": "autre",
+          "dateCreation": "2025-04-25T00:34:32.541Z"
+        },
+        "timestamp": "2025-04-25T00:34:32.542Z"
+      },
+      {
+        "id": 14,
+        "user": "system",
+        "action": "ADD_VENTE",
+        "details": {
+          "id": 2,
+          "recetteId": 2,
+          "quantite": 2,
+          "prixTotal": 21,
+          "date": "2025-04-25T00:35:49.143Z",
+          "statut": "en_attente"
+        },
+        "timestamp": "2025-04-25T00:35:49.144Z"
+      },
+      {
+        "id": 15,
+        "user": "system",
+        "action": "ADD_VENTE",
+        "details": {
+          "id": 3,
+          "recetteId": 4,
+          "quantite": 1,
+          "prixTotal": 14,
+          "date": "2025-04-25T00:35:55.985Z",
+          "statut": "en_attente"
+        },
+        "timestamp": "2025-04-25T00:35:55.986Z"
+      }
+    ],
+    "errors": []
+  }
+}

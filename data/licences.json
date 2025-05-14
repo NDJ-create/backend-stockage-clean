@@ -1,0 +1,178 @@
+{
+  "licences": [
+    {
+      "id": 1,
+      "key": "LIC-1-B21585D3",
+      "isMaster": true,
+      "clientInfo": {
+        "name": "MASTER_LICENCE_ADMIN",
+        "email": "admin@restaurant.com",
+        "isMaster": true
+      },
+      "createdAt": "2025-05-05T23:26:06.258Z",
+      "expiresAt": null,
+      "isActive": true,
+      "used": false,
+      "usedAt": null,
+      "usedBy": null,
+      "createdBy": "system",
+      "durationType": "infinite"
+    },
+    {
+      "id": null,
+      "key": "LIC-NaN-E97317CE",
+      "clientInfo": {
+        "name": "Client Test 1 Mois",
+        "email": "client1mois@example.com"
+      },
+      "createdAt": "2025-05-06T02:02:58.352Z",
+      "expiresAt": "2025-06-05T02:02:58.351Z",
+      "isActive": false,
+      "used": false,
+      "usedAt": null,
+      "usedBy": null,
+      "createdBy": "admin@restaurant.com",
+      "durationType": "1m",
+      "revoked": true,
+      "revokedAt": "2025-05-08T13:11:34.916Z",
+      "revokedBy": "system",
+      "revokedReason": "Test"
+    },
+    {
+      "id": 1,
+      "key": "LIC-1-732078A4",
+      "clientInfo": {
+        "name": "Client Intermédiaire",
+        "email": "clientinter@example.com"
+      },
+      "createdAt": "2025-05-07T15:05:54.756Z",
+      "expiresAt": "2025-06-06T15:05:54.755Z",
+      "isActive": true,
+      "used": false,
+      "usedAt": null,
+      "usedBy": null,
+      "createdBy": "admin@restaurant.com",
+      "durationType": "1m",
+      "revoked": true,
+      "revokedAt": "2025-05-07T15:07:42.372Z",
+      "revokedBy": "system",
+      "revokedReason": "Raison de la révocation"
+    },
+    {
+      "id": 2,
+      "key": "LIC-2-099BF250",
+      "clientInfo": {
+        "name": "Nouveau Client",
+        "email": "client@exemple.com",
+        "maxUsers": 3
+      },
+      "createdAt": "2025-05-07T20:43:57.541Z",
+      "expiresAt": "2026-05-07T20:43:57.541Z",
+      "isActive": true,
+      "used": false,
+      "usedAt": null,
+      "usedBy": null,
+      "createdBy": "admin@restaurant.com",
+      "durationType": "1y",
+      "revoked": true,
+      "revokedAt": "2025-05-07T22:35:08.401Z",
+      "revokedBy": "system",
+      "revokedReason": "Révocation demandée"
+    },
+    {
+      "id": 3,
+      "key": "LIC-3-E70A6650",
+      "clientInfo": {
+        "name": "Client Name",
+        "email": "client@restaurant.com"
+      },
+      "createdAt": "2025-05-08T03:08:15.455Z",
+      "expiresAt": "2026-05-08T03:08:15.455Z",
+      "isActive": true,
+      "used": false,
+      "usedAt": null,
+      "usedBy": null,
+      "createdBy": 1,
+      "durationType": "1y"
+    },
+    {
+      "id": 4,
+      "key": "LIC-4-1AFFD54A",
+      "clientInfo": {
+        "name": "Test Client",
+        "email": "client@test.com"
+      },
+      "createdAt": "2025-05-08T16:52:24.778Z",
+      "expiresAt": "2026-05-08T16:52:24.778Z",
+      "isActive": true,
+      "used": false,
+      "usedAt": null,
+      "usedBy": null,
+      "createdBy": "system",
+      "durationType": "1y",
+      "revoked": false,
+      "revokedAt": null,
+      "revokedBy": null,
+      "revokedReason": null
+    },
+    {
+      "id": 5,
+      "key": "LIC-5-F9E6C3E3",
+      "clientInfo": {
+        "name": "Test Client",
+        "email": "client@test.com"
+      },
+      "createdAt": "2025-05-08T17:14:05.394Z",
+      "expiresAt": "2026-05-08T17:14:05.394Z",
+      "isActive": true,
+      "used": false,
+      "usedAt": null,
+      "usedBy": null,
+      "createdBy": "system",
+      "durationType": "1y",
+      "revoked": false,
+      "revokedAt": null,
+      "revokedBy": null,
+      "revokedReason": null
+    },
+    {
+      "id": 6,
+      "key": "LIC-6-E6B83FC8",
+      "clientInfo": {
+        "name": "Nouveau Client",
+        "email": "client@example.com"
+      },
+      "createdAt": "2025-05-09T11:56:26.085Z",
+      "expiresAt": "2026-05-09T11:56:26.085Z",
+      "isActive": true,
+      "used": false,
+      "usedAt": null,
+      "usedBy": null,
+      "createdBy": "system",
+      "durationType": "1y",
+      "revoked": false,
+      "revokedAt": null,
+      "revokedBy": null,
+      "revokedReason": null
+    }
+  ],
+  "revokedKeys": [
+    "LIC-1-732078A4",
+    "LIC-2-099BF250",
+    "LIC-NaN-E97317CE"
+  ],
+  "usedLicences": [],
+  "logs": {
+    "actions": [],
+    "errors": []
+  },
+  "_meta": {
+    "lastUpdated": "$(date -u +'%Y-%m-%dT%H:%M:%S.000Z')",
+    "version": "3.0",
+    "settings": {
+      "masterDetectionField": "both",
+      "autoRevokeExpired": false
+    }
+  },
+  "lastId": 6
+}
