@@ -1627,8 +1627,10 @@ app.use((req, res) => {
 });
 
 // Server startup
-app.listen(PORT, () => {
-  console.log(`\n🚀 Backend démarré sur http://localhost:${PORT}`);
+const PORT = process.env.PORT || 3001;  // Utilise le port défini par Render ou 3001 si non défini
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`\n🚀 Backend démarré sur http://0.0.0.0:${PORT}`);
+});
   console.log('Endpoints disponibles:');
   console.log('• GET    /api/licence/validate');
   console.log('• POST   /api/master/licences/generate (master)');
