@@ -1621,6 +1621,15 @@ app.post('/api/init', authenticate, (req, res) => {
 });
 
 // Error handling middleware
+// Route de base
+app.get('/', (req, res) => {
+  res.send('Bienvenue sur le backend de gestion de stockage !');
+});
+
+// Toutes vos autres routes API viendraient ici...
+// (vous devriez avoir toutes vos routes définies avant les middlewares de gestion d'erreurs)
+
+// Error handling middleware (doit être placé APRÈS toutes les autres routes)
 app.use((req, res) => {
   res.status(404).json({ error: 'Endpoint non trouvé' });
 });
@@ -1672,4 +1681,3 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log('• GET    /api/history');
   console.log('• POST   /api/init');
 });
-
