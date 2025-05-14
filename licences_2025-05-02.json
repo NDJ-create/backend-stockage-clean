@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "licences": [
+    {
+      "id": 1,
+      "key": "LIC-1-9d45dba4d080efd1",
+      "clientInfo": {
+        "name": "Test"
+      },
+      "createdAt": "2025-05-02T21:50:39.307Z",
+      "expiresAt": "2026-05-02T21:50:39.307Z",
+      "isActive": false,
+      "used": true,
+      "usedAt": "2025-05-02T21:53:46.692Z",
+      "usedBy": "client_123",
+      "createdBy": "admin"
+    }
+  ],
+  "lastId": 1,
+  "revokedKeys": [
+    "LIC-1-9d45dba4d080efd1"
+  ]
+}
