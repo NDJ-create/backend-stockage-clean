@@ -1626,8 +1626,8 @@ app.use((req, res) => {
 });
 
 // Server startup
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, '0.0.0.0', () => {
+ const PORT = process.env.PORT || 10000;
+  app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🚀 Backend démarré sur http://0.0.0.0:${PORT}`);
 
   console.log('Endpoints disponibles:');
