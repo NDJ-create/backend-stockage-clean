@@ -48,7 +48,6 @@ const {
 } = require('./jsonManager');
 
 const app = express();
-const PORT = 3001;
 const SECRET_KEY = process.env.SECRET_KEY;
 const MASTER_API_KEY = process.env.MASTER_API_KEY;
 const uploadDir = path.join(__dirname, 'uploads');
