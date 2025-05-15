@@ -112,9 +112,9 @@ app.use('/uploads', express.static(uploadDir, {
 // Authentication middleware
 function authenticate(req, res, next) {
   const token = req.header('Authorization')?.split(' ')[1];
-
+  
   if (!token) {
-    return res.status(401).json({
+    return res.status(401).json({ 
       error: 'Token manquant',
       code: 'MISSING_TOKEN'
     });
@@ -122,7 +122,17 @@ function authenticate(req, res, next) {
 
   try {
     const decoded = jwt.verify(token, process.env.SECRET_KEY);
+    
+    if (!decoded.licenceKey) {
+      return res.status(403).json({ 
+        error: 'LicenceKey manquante dans le token',
+        code: 'MISSING_LICENCE_KEY' 
+      });
+    }
+
     req.user = decoded;
+    req.licence = { key: decoded.licenceKey };
+    
     next();
   } catch (err) {
     console.error('Erreur de vérification du token:', {
@@ -435,7 +445,7 @@ app.get('/api/master/licences', masterLicenceRequired, (req, res) => {
 });
 
 // ===================== ROUTES UTILISATEUR =====================
-app.post('/api/setup', licenceCheckMiddleware, async (req, res) => {
+app.post('/api/setup', licenceCheckMiddleware, authenticate, async (req, res) => {
   try {
     const data = loadData();
     if (data.data.users.length > 0) {
@@ -480,6 +490,7 @@ app.post('/api/setup', licenceCheckMiddleware, async (req, res) => {
   }
 });
 
+
 app.post('/api/login', licenceCheckMiddleware, async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -489,14 +500,41 @@ app.post('/api/login', licenceCheckMiddleware, async (req, res) => {
 
     const data = loadData();
     const user = data.data.users.find(u => u.email === email);
-    if (!user) return res.status(401).json({ error: 'Identifiants invalides' });
+    if (!user) {
+      return res.status(401).json({ error: 'Identifiants invalides' });
+    }
 
-    const valid = await verifyPassword(password, user.passwordHash);
-    if (!valid) return res.status(401).json({ error: 'Identifiants invalides' });
+    const valid = await verifyPassword(password, user.passwordHash); // Changé de user.password à user.passwordHash
+    if (!valid) {
+      return res.status(401).json({ error: 'Identifiants invalides' });
+    }
 
+    // Récupérer la clé licence depuis le middleware licenceCheckMiddleware
+    const licenceKey = req.licence?.key || req.headers['x-licence-key'];
+    if (!licenceKey) {
+      return res.status(400).json({ 
+        error: 'LicenceKey manquante',
+        code: 'MISSING_LICENCE_KEY'
+      });
+    }
+
+    // Vérifier que l'utilisateur a bien cette licence
+    if (user.licenceKey && user.licenceKey !== licenceKey) {
+      return res.status(403).json({ 
+        error: 'Licence non autorisée pour cet utilisateur',
+        code: 'LICENCE_MISMATCH'
+      });
+    }
+
+    // Générer le token en incluant la licenceKey
     const token = jwt.sign(
-      { userId: user.id, email: user.email, role: user.role },
-      SECRET_KEY,
+      { 
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+        licenceKey // Important: inclure la licenceKey dans le token
+      },
+      SECRET_KEY, // Utiliser la constante définie plus haut
       { expiresIn: '24h' }
     );
 
@@ -509,9 +547,32 @@ app.post('/api/login', licenceCheckMiddleware, async (req, res) => {
       }
     });
   } catch (error) {
-    res.status(500).json({ error: 'Erreur serveur' });
+    console.error('Erreur lors de la connexion:', error);
+    res.status(500).json({ 
+      error: 'Erreur serveur',
+      ...(process.env.NODE_ENV === 'development' && { details: error.message })
+    });
   }
 });
+
+app.post('/api/reset-password', licenceCheckMiddleware, authenticate, async (req, res) => {
+  try {
+    const { email, newPassword, secretAnswer } = req.body;
+    const data = loadData();
+    const user = data.data.users.find(u => u.email === email);
+
+    if (!user || user.secretAnswer !== secretAnswer) {
+      throw new Error('Informations de réinitialisation invalides');
+    }
+
+    user.passwordHash = await hashPassword(newPassword);
+    saveData(data);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 
 // ===================== ROUTES SÉCURISÉES =====================
 app.post('/api/dashboard/licences/generate', authenticate, (req, res) => {
@@ -562,6 +623,7 @@ app.get('/api/stock', authenticate, (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
 
 app.post('/api/stock', authenticate, (req, res) => {
   try {
@@ -1199,6 +1261,7 @@ app.get('/api/rapports', authenticate, (req, res) => {
   }
 });
 
+
 // Staff routes (SuperAdmin)
 app.get('/api/staff', authenticate, (req, res) => {
   try {
@@ -1285,7 +1348,7 @@ app.delete('/api/staff/:id', authenticate, async (req, res) => {
   }
 });
 
-app.post('/api/verify-password', authenticate, async (req, res) => {
+app.post('/api/verify-password', licenceCheckMiddleware, authenticate, async (req, res) => {
   try {
     const { password } = req.body;
     const userId = req.user.userId;
@@ -1319,6 +1382,7 @@ app.post('/api/verify-password', authenticate, async (req, res) => {
     });
   }
 });
+
 
 // ===================== HISTORIQUE ROUTES =====================
 app.get('/api/history', authenticate, (req, res) => {
@@ -1595,6 +1659,16 @@ app.get('/api/history', authenticate, (req, res) => {
     });
   }
 });
+
+app.get('/api/debug', authenticate, (req, res) => {
+  const data = loadData();
+  res.json({
+    stock: data.data.stock.some(item => !item.licenceKey),
+    rapports: data.data.rapports.ventes.some(v => !v.licenceKey),
+    historique: data.logs.actions.some(a => !a.licenceKey)
+  });
+});
+
 
 // ===================== INITIALISATION ROUTE =====================
 app.post('/api/init', authenticate, (req, res) => {

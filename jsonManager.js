@@ -11,7 +11,7 @@ const jwt = require('jsonwebtoken');
 // CORE FUNCTIONS
 // ==============================================
 
-function logAction(action, details) {
+function logAction(action, details, licenceKey) {
   const data = loadData();
 
   if (!data.logs) {
@@ -48,6 +48,7 @@ function logAction(action, details) {
     timestamp: new Date().toISOString(),
     action: actionMap[action] || action.toLowerCase(),
     user: details.user || 'system',
+    licenceKey: licenceKey, // Ajout de licenceKey
     details: {
       ...details,
       timestamp: new Date().toISOString()
