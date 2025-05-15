@@ -56,7 +56,7 @@ const uploadDir = path.join(__dirname, 'uploads');
 app.use(cors({
   origin: 'http://localhost:3000',
   credentials: true,
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-licence-key', 'x-master-key']
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-licence-key']
 }));
 app.use(express.json());
 
@@ -110,13 +110,11 @@ app.use('/uploads', express.static(uploadDir, {
 }));
 
 // Authentication middleware
-
-// Middleware d'authentification JWT (conservé tel quel)
 function authenticate(req, res, next) {
   const token = req.header('Authorization')?.split(' ')[1];
-  
+
   if (!token) {
-    return res.status(401).json({ 
+    return res.status(401).json({
       error: 'Token manquant',
       code: 'MISSING_TOKEN'
     });
@@ -131,40 +129,35 @@ function authenticate(req, res, next) {
       error: err.message,
       token: token.substring(0, 10) + '...'
     });
-    res.status(401).json({ 
+    res.status(401).json({
       error: 'Token invalide',
       code: 'INVALID_TOKEN'
     });
   }
 }
 
-// Nouveau middleware masterLicenceRequired (fusionné et amélioré)
+// Nouveau middleware masterLicenceRequired
 function masterLicenceRequired(req, res, next) {
-  // 1. Récupération de la clé de licence (toutes méthodes supportées)
-  const licenceKey = req.headers['x-licence-key'] || 
-                   req.headers['x-master-key'] || 
-                   (req.headers['authorization']?.startsWith('Licence ') ? 
-                    req.headers['authorization'].split(' ')[1] : null) ||
+  const licenceKey = req.headers['x-licence-key'] ||
+                   req.headers['x-master-key'] ||
+                   (req.headers['authorization']?.startsWith('Bearer ') &&
+                    req.headers['authorization'].split(' ')[1]) ||
                    req.body?.key;
 
-  // 2. Journalisation de debug
   console.log('=== MASTER AUTH DEBUG ===\nClé reçue:', licenceKey);
 
-  // 3. Vérification de la clé master globale (backdoor)
   if (licenceKey === process.env.MASTER_API_KEY) {
     console.log('Accès master via clé globale');
     return next();
   }
 
-  // 4. Validation standard de la licence
   try {
     if (!licenceKey) {
       throw new Error('Aucune clé de licence fournie');
     }
 
     const validation = validateLicence(licenceKey);
-    
-    // Debug: Affiche le résultat complet de la validation
+
     console.log('Résultat validation:', {
       valid: validation.valid,
       isMaster: validation.isMaster,
@@ -179,7 +172,6 @@ function masterLicenceRequired(req, res, next) {
       throw new Error('Une licence master est requise');
     }
 
-    // Stockage dans la requête pour usage ultérieur
     req.licence = validation.licence;
     next();
 
@@ -200,7 +192,6 @@ function masterLicenceRequired(req, res, next) {
 
 // Licence check middleware
 function licenceCheckMiddleware(req, res, next) {
-  // 1. Routes exemptées (ne nécessitent PAS de licence)
   const exemptedRoutes = [
     '/api/licence/validate',
     '/api/setup',
@@ -208,36 +199,30 @@ function licenceCheckMiddleware(req, res, next) {
     '/api/reset-password'
   ];
 
-  // 2. Vérification des routes exemptées
   if (exemptedRoutes.some(route => req.path.startsWith(route))) {
     return next();
   }
 
-  // 3. Récupération de la clé de licence
   const licenceKey = req.headers['x-licence-key'];
 
-  // 4. Debug (optionnel)
-  console.log('[Licence Check] Route:', req.path, 'Key:', licenceKey ? `${licenceKey.substring(0, 3)}...` : 'none');
+  console.log('[Licence Check] Route:', req.path, 'Key:', licenceKey);
 
-  // 5. Vérification Master Key (backdoor)
   if (licenceKey === MASTER_API_KEY) {
     console.log('[Licence Check] Accès master autorisé');
     return next();
   }
 
-  // 6. Validation standard
   try {
     if (!licenceKey) {
-      throw new Error('Licence requise. Header manquant: x-licence-key');
+      throw new Error('Licence requise. Header manquant');
     }
 
     const validation = validateLicence(licenceKey);
-    
+
     if (!validation.valid) {
-      throw new Error(validation.reason || 'Licence invalide ou expirée');
+      throw new Error(validation.reason || 'Licence invalide');
     }
 
-    // 7. Attache les données de licence à la requête pour usage ultérieur
     req.licence = {
       key: licenceKey,
       ...validation.licenceData
@@ -245,7 +230,6 @@ function licenceCheckMiddleware(req, res, next) {
 
     next();
   } catch (error) {
-    // 8. Gestion des erreurs
     console.error('[Licence Check] Erreur:', error.message);
     return res.status(403).json({
       error: 'Accès refusé',
@@ -256,14 +240,12 @@ function licenceCheckMiddleware(req, res, next) {
   }
 }
 
-
 // ===================== ROUTES LICENCE =====================
 app.post('/api/licence/validate', (req, res) => {
   try {
     const { key } = req.body;
-    console.log(`=== DEBUG VALIDATION START ===\nClé reçue: ${key.substring(0, 3)}...${key.substring(-3)}`);
+    console.log(`=== DEBUG VALIDATION START ===\nClé reçue: ${key}`);
 
-    // 1. Validation Master Key
     if (key === MASTER_API_KEY) {
       const response = {
         valid: true,
@@ -277,11 +259,10 @@ app.post('/api/licence/validate', (req, res) => {
         },
         isActive: true
       };
-      console.log('Validation licence (MASTER):', { ...response, key: '***' });
+      console.log('Validation licence (MASTER):', { ...response, key: key.substring(0, 3) + '...' });
       return res.json(response);
     }
 
-    // 2. Validation Standard
     const validation = validateLicence(key);
     const response = {
       valid: validation.valid,
@@ -290,13 +271,13 @@ app.post('/api/licence/validate', (req, res) => {
       expiresAt: validation.expiresAt,
       clientInfo: validation.licence?.clientInfo || null,
       isActive: validation.licence?.isActive !== false,
-      ...(!validation.valid && { reason: validation.reason || 'Invalid licence key' })
+      ...(!validation.valid && { reason: validation.reason })
     };
 
-    console.log('Validation licence:', { 
-      ...response, 
-      key: key.substring(0, 3) + '...' + key.substring(-3),
-      timestamp: new Date().toISOString() 
+    console.log('Validation licence:', {
+      ...response,
+      key: key.substring(0, 3) + '...' + key.substring(key.length - 3),
+      timestamp: new Date().toISOString()
     });
 
     res.json(response);
@@ -309,7 +290,6 @@ app.post('/api/licence/validate', (req, res) => {
   }
 });
 
-
 app.post('/api/master/licences/generate', masterLicenceRequired, (req, res) => {
   try {
     const { clientInfo = {}, durationType = '1y' } = req.body;
@@ -321,7 +301,7 @@ app.post('/api/master/licences/generate', masterLicenceRequired, (req, res) => {
       });
     }
 
-    const newLicence = generateLicence(clientInfo, 'system', durationType);
+    const newLicence = generateLicence(clientInfo, 'system');
 
     res.status(201).json({
       licence: {
@@ -341,7 +321,7 @@ app.post('/api/master/licences/generate', masterLicenceRequired, (req, res) => {
   }
 });
 
-app.post('/api/master/licences/generate', masterLicenceRequired, (req, res) => {
+app.post('/api/master/licences/revoke', masterLicenceRequired, (req, res) => {
   try {
     const { key, reason } = req.body;
 
@@ -369,7 +349,7 @@ app.post('/api/master/licences/generate', masterLicenceRequired, (req, res) => {
   }
 });
 
-app.post('/api/master/licences/generate', masterLicenceRequired, (req, res) => {
+app.post('/api/master/licences/mark-used', masterLicenceRequired, (req, res) => {
   try {
     const { key, userId } = req.body;
 
@@ -399,29 +379,26 @@ app.post('/api/master/licences/generate', masterLicenceRequired, (req, res) => {
 
 app.get('/api/master/licences', masterLicenceRequired, (req, res) => {
   try {
-    const { status } = req.query; // Récupère le paramètre de filtrage
+    const { status } = req.query;
     const licenceData = loadLicenceData();
-    
-    // Formatage de base
+
     let formattedLicences = licenceData.licences.map(licence => ({
       key: licence.key,
       clientInfo: licence.clientInfo || {},
       createdAt: licence.createdAt,
       expiresAt: licence.expiresAt,
       durationType: licence.durationType || '1y',
-      isActive: licence.isActive !== false, // Default true si non défini
-      revoked: !!licence.revoked, // Force boolean
+      isActive: licence.isActive !== false,
+      revoked: !!licence.revoked,
       revokedAt: licence.revokedAt,
       revokedReason: licence.revokedReason,
       usedBy: licence.usedBy || null,
-      isExpired: licence.expiresAt && new Date(licence.expiresAt) < new Date()
     }));
 
-    // Filtrage avancé
     if (status === 'active') {
-      formattedLicences = formattedLicences.filter(l => 
-        !l.revoked && 
-        l.isActive && 
+      formattedLicences = formattedLicences.filter(l =>
+        !l.revoked &&
+        l.isActive &&
         !l.isExpired
       );
     } else if (status === 'revoked') {
@@ -430,10 +407,9 @@ app.get('/api/master/licences', masterLicenceRequired, (req, res) => {
       formattedLicences = formattedLicences.filter(l => l.isExpired);
     }
 
-    // Calcul des compteurs
-    const validCount = formattedLicences.filter(l => 
-      !l.revoked && 
-      l.isActive && 
+    const validCount = formattedLicences.filter(l =>
+      !l.revoked &&
+      l.isActive &&
       !l.isExpired
     ).length;
 
@@ -442,7 +418,7 @@ app.get('/api/master/licences', masterLicenceRequired, (req, res) => {
       count: formattedLicences.length,
       validCount,
       revokedCount: formattedLicences.filter(l => l.revoked).length,
-      expiredCount: formattedLicences.filter(l => l.isExpired && !l.revoked).length
+      expiredCount: formattedLicences.filter(l => l.isExpired).length,
     });
 
   } catch (error) {
@@ -453,25 +429,22 @@ app.get('/api/master/licences', masterLicenceRequired, (req, res) => {
     });
     res.status(500).json({
       error: 'Erreur de chargement des licences',
-      details: process.env.NODE_ENV === 'development' ? error.message : null
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
 
-
-
 // ===================== ROUTES UTILISATEUR =====================
-
 app.post('/api/setup', licenceCheckMiddleware, async (req, res) => {
   try {
     const data = loadData();
     if (data.data.users.length > 0) {
-      return res.status(400).json({ error: 'Le système est déjà configuré.' });
+      return res.status(400).json({ error: 'Le système est déjà configuré' });
     }
 
     const { email, password, secretQuestion, secretAnswer } = req.body;
     if (!email || !password || !secretQuestion || !secretAnswer) {
-      return res.status(400).json({ error: 'Email, mot de passe, question secrète et réponse secrète sont requis.' });
+      return res.status(400).json({ error: 'Email, mot de passe, question secrète et réponse secrète sont requis' });
     }
 
     const hashedPassword = await hashPassword(password);
@@ -507,7 +480,6 @@ app.post('/api/setup', licenceCheckMiddleware, async (req, res) => {
   }
 });
 
-
 app.post('/api/login', licenceCheckMiddleware, async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -517,10 +489,10 @@ app.post('/api/login', licenceCheckMiddleware, async (req, res) => {
 
     const data = loadData();
     const user = data.data.users.find(u => u.email === email);
-    if (!user) return res.status(401).json({ error: 'Identifiants incorrects' });
+    if (!user) return res.status(401).json({ error: 'Identifiants invalides' });
 
     const valid = await verifyPassword(password, user.passwordHash);
-    if (!valid) return res.status(401).json({ error: 'Identifiants incorrects' });
+    if (!valid) return res.status(401).json({ error: 'Identifiants invalides' });
 
     const token = jwt.sign(
       { userId: user.id, email: user.email, role: user.role },
@@ -542,7 +514,7 @@ app.post('/api/login', licenceCheckMiddleware, async (req, res) => {
 });
 
 // ===================== ROUTES SÉCURISÉES =====================
-app.post('/api/dashboard/licences/generate', authenticate, masterLicenceRequired, (req, res) => {
+app.post('/api/dashboard/licences/generate', authenticate, (req, res) => {
   try {
     const { clientInfo = {}, durationType = '1y' } = req.body;
 
@@ -553,7 +525,7 @@ app.post('/api/dashboard/licences/generate', authenticate, masterLicenceRequired
       });
     }
 
-    const newLicence = generateLicence(clientInfo, req.user.userId, durationType);
+    const newLicence = generateLicence(clientInfo, req.user.userId);
 
     res.status(201).json({
       licence: {
@@ -574,17 +546,17 @@ app.post('/api/dashboard/licences/generate', authenticate, masterLicenceRequired
   }
 });
 
-
-
 // ===================== STOCK ROUTES =====================
-
 app.get('/api/stock', authenticate, (req, res) => {
   try {
     const data = loadData();
-    const stockWithAlerts = data.data.stock.map(item => ({
-      ...item,
-      alerte: item.quantite <= (item.seuilAlerte || 5)
-    }));
+    const licenceKey = req.licence.key;
+    const stockWithAlerts = data.data.stock
+      .filter(item => item.licenceKey === licenceKey)
+      .map(item => ({
+        ...item,
+        alerte: item.quantite <= (item.seuilAlerte || 5)
+      }));
     res.json(stockWithAlerts);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -593,12 +565,14 @@ app.get('/api/stock', authenticate, (req, res) => {
 
 app.post('/api/stock', authenticate, (req, res) => {
   try {
+    const licenceKey = req.licence.key;
     const newItem = {
       ...req.body,
       quantite: parseInt(req.body.quantite) || 0,
       seuilAlerte: parseInt(req.body.seuilAlerte) || 5,
       prixAchat: parseFloat(req.body.prixAchat) || 0,
-      user: req.user.userId
+      user: req.user.userId,
+      licenceKey
     };
     const createdItem = addStockItem(newItem);
     res.status(201).json(createdItem);
@@ -609,12 +583,20 @@ app.post('/api/stock', authenticate, (req, res) => {
 
 app.put('/api/stock/:id', authenticate, (req, res) => {
   try {
+    const licenceKey = req.licence.key;
+    const data = loadData();
+    const item = data.data.stock.find(item => item.id === parseInt(req.params.id) && item.licenceKey === licenceKey);
+    if (!item) {
+      return res.status(404).json({ error: 'Item not found or not authorized' });
+    }
+
     const updatedItem = {
       ...req.body,
       id: parseInt(req.params.id),
       quantite: parseInt(req.body.quantite) || 0,
       prixAchat: parseFloat(req.body.prixAchat) || 0,
-      user: req.user.userId
+      user: req.user.userId,
+      licenceKey
     };
     updateStockItem(updatedItem);
     res.json({ success: true });
@@ -625,6 +607,13 @@ app.put('/api/stock/:id', authenticate, (req, res) => {
 
 app.delete('/api/stock/:id', authenticate, (req, res) => {
   try {
+    const licenceKey = req.licence.key;
+    const data = loadData();
+    const item = data.data.stock.find(item => item.id === parseInt(req.params.id) && item.licenceKey === licenceKey);
+    if (!item) {
+      return res.status(404).json({ error: 'Item not found or not authorized' });
+    }
+
     deleteStockItem(parseInt(req.params.id));
     res.json({ success: true });
   } catch (error) {
@@ -635,33 +624,29 @@ app.delete('/api/stock/:id', authenticate, (req, res) => {
 // ===================== COMMANDES ROUTES =====================
 app.get('/api/commandes', authenticate, (req, res) => {
   try {
+    const licenceKey = req.licence.key;
     const data = loadData();
-    const commandes = data.data.commandes.map(commande => {
-      // Vérifiez si la propriété `produits` existe et est un tableau
-      const produits = commande.produits && Array.isArray(commande.produits)
-        ? commande.produits.map(produit => ({
-            ...produit,
-          }))
-        : [];
-
-      return {
+    const commandes = data.data.commandes
+      .filter(commande => commande.licenceKey === licenceKey)
+      .map(commande => ({
         ...commande,
-        produits
-      };
-    });
-
+        produits: commande.produits && Array.isArray(commande.produits)
+          ? commande.produits.map(produit => ({
+              ...produit,
+            }))
+          : [],
+      }));
     res.json(commandes);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-
-
 app.get('/api/commandes/:id', authenticate, (req, res) => {
   try {
+    const licenceKey = req.licence.key;
     const data = loadData();
-    const commande = data.data.commandes.find(c => c.id === parseInt(req.params.id));
+    const commande = data.data.commandes.find(c => c.id === parseInt(req.params.id) && c.licenceKey === licenceKey);
     if (!commande) return res.status(404).json({ error: 'Commande non trouvée' });
 
     const commandeWithCFA = {
@@ -679,6 +664,7 @@ app.get('/api/commandes/:id', authenticate, (req, res) => {
 
 app.post('/api/commandes/new', authenticate, (req, res) => {
   try {
+    const licenceKey = req.licence.key;
     const requiredFields = ['fournisseur', 'nomProduit', 'prix'];
     const missingFields = requiredFields.filter(field => !req.body[field]);
 
@@ -712,7 +698,8 @@ app.post('/api/commandes/new', authenticate, (req, res) => {
       statut: "en_attente",
       date: new Date().toISOString(),
       deliveryDate: req.body.deliveryDate || null,
-      user: req.user.userId
+      user: req.user.userId,
+      licenceKey
     };
 
     const createdCommande = addCommande(newCommande);
@@ -724,67 +711,30 @@ app.post('/api/commandes/new', authenticate, (req, res) => {
 
 app.post('/api/commandes/:id/valider', authenticate, (req, res) => {
   try {
+    const licenceKey = req.licence.key;
     const data = loadData();
-    const commandeIndex = data.data.commandes.findIndex(c => c.id === parseInt(req.params.id));
+    const commandeIndex = data.data.commandes.findIndex(c => c.id === parseInt(req.params.id) && c.licenceKey === licenceKey);
 
     if (commandeIndex === -1) {
       return res.status(404).json({ error: "Commande non trouvée" });
     }
 
     const commande = data.data.commandes[commandeIndex];
-
-    if (commande.statut === 'validée') {
-      return res.status(400).json({ error: "Commande déjà validée" });
-    }
-
-    commande.statut = 'validée';
+    commande.statut = "validée";
     commande.dateValidation = new Date().toISOString();
 
     commande.produits.forEach(produit => {
-      let stockItem = data.data.stock.find(item => item.nom === produit.nom);
-
-      if (!stockItem) {
-        stockItem = {
-          id: data.data.stock.length > 0 ? Math.max(...data.data.stock.map(item => item.id)) + 1 : 1,
-          nom: produit.nom,
-          quantite: 0,
-          prixAchat: produit.prixUnitaire,
-          seuilAlerte: 5,
-          categorie: 'nouveau',
-          dateAjout: new Date().toISOString()
-        };
-        data.data.stock.push(stockItem);
+      const stockItem = data.data.stock.find(item => item.nom === produit.nom && item.licenceKey === licenceKey);
+      if (stockItem) {
+        stockItem.quantite += produit.quantite;
       }
-
-      stockItem.quantite += produit.quantite;
-
-      data.data.mouvements.push({
-        id: data.data.mouvements.length > 0 ? Math.max(...data.data.mouvements.map(m => m.id)) + 1 : 1,
-        productId: stockItem.id,
-        nom: stockItem.nom,
-        type: 'réapprovisionnement',
-        quantite: produit.quantite,
-        date: new Date().toISOString(),
-        details: {
-          source: 'commande',
-          commandeId: commande.id,
-          prixUnitaire: produit.prixUnitaire
-        }
-      });
-    });
-
-    data.data.rapports.depenses.push({
-      id: generateId(data.data.rapports.depenses),
-      commandeId: commande.id,
-      montant: commande.montant,
-      date: new Date().toISOString()
     });
 
     saveData(data);
     res.json({
       success: true,
       commande: commande,
-      stock: data.data.stock.find(item => item.nom === commande.productName)
+      stock: data.data.stock.find(item => item.nom === commande.productName && item.licenceKey === licenceKey)
     });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -793,7 +743,15 @@ app.post('/api/commandes/:id/valider', authenticate, (req, res) => {
 
 app.post('/api/commandes/:id/annuler', authenticate, (req, res) => {
   try {
+    const licenceKey = req.licence.key;
     const commandeId = parseInt(req.params.id);
+    const data = loadData();
+    const commandeIndex = data.data.commandes.findIndex(c => c.id === commandeId && c.licenceKey === licenceKey);
+
+    if (commandeIndex === -1) {
+      return res.status(404).json({ error: "Commande non trouvée" });
+    }
+
     annulerCommande(commandeId);
     res.json({ success: true, message: 'Commande annulée' });
   } catch (error) {
@@ -802,13 +760,15 @@ app.post('/api/commandes/:id/annuler', authenticate, (req, res) => {
 });
 
 // ===================== VENTES ROUTES =====================
-
 app.get('/api/ventes', authenticate, (req, res) => {
   try {
+    const licenceKey = req.licence.key;
     const data = loadData();
-    const ventes = data.data.ventes.map(vente => ({
-      ...vente,
-    }));
+    const ventes = data.data.ventes
+      .filter(vente => vente.licenceKey === licenceKey)
+      .map(vente => ({
+        ...vente,
+      }));
     res.json(ventes || []);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -817,6 +777,7 @@ app.get('/api/ventes', authenticate, (req, res) => {
 
 app.post('/api/ventes', authenticate, (req, res) => {
   try {
+    const licenceKey = req.licence.key;
     if (!req.body.recetteId || !req.body.quantite) {
       throw new Error("recetteId et quantite sont requis");
     }
@@ -828,7 +789,8 @@ app.post('/api/ventes', authenticate, (req, res) => {
       date: new Date().toISOString(),
       statut: 'en_attente',
       client: req.body.client || 'anonyme',
-      user: req.user.userId
+      user: req.user.userId,
+      licenceKey
     };
 
     const createdVente = addVente(newVente);
@@ -840,14 +802,15 @@ app.post('/api/ventes', authenticate, (req, res) => {
 
 app.post('/api/ventes/:id/valider', authenticate, (req, res) => {
   try {
+    const licenceKey = req.licence.key;
     const data = loadData();
-    const vente = data.data.ventes.find(v => v.id === parseInt(req.params.id));
+    const vente = data.data.ventes.find(v => v.id === parseInt(req.params.id) && v.licenceKey === licenceKey);
 
     if (!vente) {
       return res.status(404).json({ error: "Vente non trouvée" });
     }
 
-    const recette = data.data.recettes.find(r => r.id === vente.recetteId);
+    const recette = data.data.recettes.find(r => r.id === vente.recetteId && r.licenceKey === licenceKey);
     if (!recette) {
       return res.status(400).json({ error: "Recette introuvable" });
     }
@@ -856,7 +819,7 @@ app.post('/api/ventes/:id/valider', authenticate, (req, res) => {
     let beneficeTotal = 0;
 
     recette.ingredients.forEach(ingredient => {
-      const stockItem = data.data.stock.find(item => item.id === ingredient.id);
+      const stockItem = data.data.stock.find(item => item.id === ingredient.id && item.licenceKey === licenceKey);
       if (stockItem) {
         coutTotal += stockItem.prixAchat * ingredient.quantite;
       }
@@ -865,7 +828,7 @@ app.post('/api/ventes/:id/valider', authenticate, (req, res) => {
     beneficeTotal = (recette.prix * vente.quantite) - coutTotal;
 
     recette.ingredients.forEach(ingredient => {
-      const stockItem = data.data.stock.find(item => item.id === ingredient.id);
+      const stockItem = data.data.stock.find(item => item.id === ingredient.id && item.licenceKey === licenceKey);
       if (stockItem) {
         stockItem.quantite -= ingredient.quantite * vente.quantite;
 
@@ -880,7 +843,8 @@ app.post('/api/ventes/:id/valider', authenticate, (req, res) => {
             venteId: vente.id,
             recetteId: recette.id,
             prixAchat: stockItem.prixAchat
-          }
+          },
+          licenceKey
         });
       }
     });
@@ -894,14 +858,16 @@ app.post('/api/ventes/:id/valider', authenticate, (req, res) => {
       id: generateId(data.data.rapports.ventes),
       venteId: vente.id,
       montant: recette.prix * vente.quantite,
-      date: new Date().toISOString()
+      date: new Date().toISOString(),
+      licenceKey
     });
 
     data.data.rapports.benefices.push({
       id: generateId(data.data.rapports.benefices),
       venteId: vente.id,
       montant: beneficeTotal,
-      date: new Date().toISOString()
+      date: new Date().toISOString(),
+      licenceKey
     });
 
     saveData(data);
@@ -918,36 +884,37 @@ app.post('/api/ventes/:id/valider', authenticate, (req, res) => {
 // ===================== RECETTES ROUTES =====================
 app.get('/api/recettes', authenticate, (req, res) => {
   try {
+    const licenceKey = req.licence.key;
     const data = loadData();
-    const recettesWithFullUrl = data.data.recettes.map(recette => ({
-      ...recette,
-      ingredients: (Array.isArray(recette.ingredients)
-        ? recette.ingredients.map(ing => ({
-            id: ing.id,
-            nom: ing.nom,
-            quantite: ing.quantite,
-            unite: ing.unite || 'unité(s)'
-          }))
-        : []),
-      image: recette.image
-        ? `http://localhost:3001${recette.image}`
-        : null
-    }));
+    const recettesWithFullUrl = data.data.recettes
+      .filter(recette => recette.licenceKey === licenceKey)
+      .map(recette => ({
+        ...recette,
+        ingredients: (Array.isArray(recette.ingredients)
+          ? recette.ingredients.map(ing => ({
+              id: ing.id,
+              nom: ing.nom,
+              quantite: ing.quantite,
+              unite: ing.unite || 'unité(s)'
+            }))
+          : []),
+        image: recette.image
+          ? `http://localhost:3001${recette.image}`
+          : null
+      }));
     res.json(recettesWithFullUrl || []);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-
-// Modification de recette (avec option de mise à jour du stock)
-app.put('/api/recettes/:id/update', authenticate, upload.single('image'), async (req, res) => {
+app.put('/api/recettes/:id/update', authenticate, upload.single('image'), (req, res) => {
   try {
+    const licenceKey = req.licence.key;
     const recetteId = parseInt(req.params.id);
     let recipeData = req.body.data ? JSON.parse(req.body.data) : req.body;
     const updateStock = req.query.updateStock === 'true';
 
-    // Sanitize ingredients
     recipeData.ingredients = (Array.isArray(recipeData.ingredients) ? recipeData.ingredients : [])
       .map(ing => ({
         id: parseInt(ing.id) || 0,
@@ -956,48 +923,44 @@ app.put('/api/recettes/:id/update', authenticate, upload.single('image'), async 
         unite: ing.unite || 'unité(s)'
       }));
 
-    // Load data
     const data = loadData();
-    const recipeIndex = data.data.recettes.findIndex(r => r.id === recetteId);
-    
+    const recipeIndex = data.data.recettes.findIndex(r => r.id === recetteId && r.licenceKey === licenceKey);
+
     if (recipeIndex === -1) {
       throw new Error('Recette non trouvée');
     }
 
-    // Vérification stock si nécessaire
     if (updateStock) {
       for (const ing of recipeData.ingredients) {
-        const item = data.data.stock.find(i => i.id === ing.id);
-        if (!item) throw new Error(`Ingrédient ${ing.id} non trouvé`);
+        const item = data.data.stock.find(i => i.id === ing.id && i.licenceKey === licenceKey);
+        if (!item) throw new Error(`Ingrédient ${ing.id} introuvable`);
         if (item.quantite < ing.quantite) {
           throw new Error(`Stock insuffisant pour ${item.nom}`);
         }
       }
     }
 
-    // Update image if new file uploaded
     if (req.file) {
       recipeData.image = `/uploads/${req.file.filename}`;
     }
 
-    // Update recipe
     const oldRecipe = data.data.recettes[recipeIndex];
     data.data.recettes[recipeIndex] = {
       ...oldRecipe,
       ...recipeData,
-      prix: parseFloat(recipeData.prix) || oldRecipe.prix
+      prix: parseFloat(recipeData.prix) || oldRecipe.prix,
+      licenceKey
     };
 
-    // Update stock if requested
     if (updateStock) {
       for (const ing of recipeData.ingredients) {
-        const item = data.data.stock.find(i => i.id === ing.id);
+        const item = data.data.stock.find(i => i.id === ing.id && i.licenceKey === licenceKey);
         item.quantite -= ing.quantite;
-        
-        // Log movement
+
         data.data.mouvements.push({
           id: generateId(data.data.mouvements),
           productId: item.id,
+          nom: item.nom,
           type: 'modification_recette',
           quantite: -ing.quantite,
           date: new Date().toISOString(),
@@ -1005,16 +968,17 @@ app.put('/api/recettes/:id/update', authenticate, upload.single('image'), async 
             recetteId,
             recetteNom: recipeData.nom,
             user: req.user.userId
-          }
+          },
+          licenceKey
         });
       }
     }
 
     saveData(data);
-    
+
     res.json({
       ...data.data.recettes[recipeIndex],
-      image: data.data.recettes[recipeIndex].image 
+      image: data.data.recettes[recipeIndex].image
         ? `http://localhost:3001${data.data.recettes[recipeIndex].image}`
         : null
     });
@@ -1025,8 +989,7 @@ app.put('/api/recettes/:id/update', authenticate, upload.single('image'), async 
   }
 });
 
-
-app.post('/api/recettes', authenticate, upload.single('image'), async (req, res) => {
+app.post('/api/recettes', authenticate, upload.single('image'), (req, res) => {
   const sanitizeIngredients = (ingredients) => {
     return (Array.isArray(ingredients) ? ingredients : [])
       .map(ing => ({
@@ -1040,18 +1003,16 @@ app.post('/api/recettes', authenticate, upload.single('image'), async (req, res)
   let recipeData;
 
   try {
-    // Gestion du payload (JSON ou FormData)
     if (req.body.data) {
       try {
         recipeData = JSON.parse(req.body.data);
       } catch (e) {
-        return res.status(400).json({ error: "Format JSON invalide dans req.body.data" });
+        return res.status(400).json({ error: "Format JSON invalide" });
       }
     } else {
       recipeData = req.body;
     }
 
-    // Gestion des ingrédients (string JSON ou objet)
     if (typeof recipeData.ingredients === 'string') {
       try {
         recipeData.ingredients = JSON.parse(recipeData.ingredients);
@@ -1060,12 +1021,11 @@ app.post('/api/recettes', authenticate, upload.single('image'), async (req, res)
       }
     }
 
-    // Validation requise
     if (!recipeData.nom?.trim()) {
       throw new Error("Le nom est requis");
     }
 
-    // Construction de l'objet final
+    const licenceKey = req.licence.key;
     const newRecipe = {
       ...recipeData,
       id: generateId(),
@@ -1073,25 +1033,23 @@ app.post('/api/recettes', authenticate, upload.single('image'), async (req, res)
       ingredients: sanitizeIngredients(recipeData.ingredients),
       image: req.file ? `/uploads/${req.file.filename}` : null,
       user: req.user.userId,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      licenceKey
     };
 
-    // Validation supplémentaire des ingrédients
     if (!Array.isArray(newRecipe.ingredients) || newRecipe.ingredients.length === 0) {
       throw new Error("Au moins un ingrédient valide est requis");
     }
 
-    const invalidIngredient = newRecipe.ingredients.find(ing => 
+    const invalidIngredient = newRecipe.ingredients.find(ing =>
       !ing.nom || isNaN(ing.quantite) || ing.quantite <= 0
     );
 
     if (invalidIngredient) {
-      throw new Error(`Ingrédient invalide: ${invalidIngredient.nom || 'sans nom'}`);
+      throw new Error(`Ingrédient invalide: ${invalidIngredient.nom}`);
     }
 
     const createdRecipe = addRecette(newRecipe);
-    
+
     res.status(201).json({
       success: true,
       data: {
@@ -1101,11 +1059,10 @@ app.post('/api/recettes', authenticate, upload.single('image'), async (req, res)
     });
 
   } catch (error) {
-    // Nettoyage du fichier uploadé en cas d'erreur
     if (req.file) {
       fs.unlink(req.file.path, () => {});
     }
-    
+
     res.status(400).json({
       success: false,
       error: error.message,
@@ -1116,7 +1073,15 @@ app.post('/api/recettes', authenticate, upload.single('image'), async (req, res)
 
 app.delete('/api/recettes/:id', authenticate, async (req, res) => {
   try {
+    const licenceKey = req.licence.key;
     const recetteId = parseInt(req.params.id);
+    const data = loadData();
+    const recetteIndex = data.data.recettes.findIndex(r => r.id === recetteId && r.licenceKey === licenceKey);
+
+    if (recetteIndex === -1) {
+      return res.status(404).json({ error: 'Recette non trouvée' });
+    }
+
     deleteRecette(recetteId);
     res.json({ success: true, message: 'Recette supprimée' });
   } catch (error) {
@@ -1125,26 +1090,28 @@ app.delete('/api/recettes/:id', authenticate, async (req, res) => {
 });
 
 // ===================== MOUVEMENTS ROUTES =====================
-
 app.get('/api/mouvements', authenticate, (req, res) => {
   try {
+    const licenceKey = req.licence.key;
     const data = loadData();
-    const mouvements = data.data.mouvements.map(mouvement => ({
-      ...mouvement,
-      details: mouvement.details && mouvement.details.source ? {
-        ...mouvement.details,
-      } : mouvement.details
-    }));
+    const mouvements = data.data.mouvements
+      .filter(mouvement => mouvement.licenceKey === licenceKey)
+      .map(mouvement => ({
+        ...mouvement,
+        details: mouvement.details && mouvement.details.stockAfter
+          ? { ...mouvement.details, stockAfter: mouvement.details.stockAfter }
+          : mouvement.details
+      }));
     res.json(mouvements || []);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-
 // Ajouter dans votre backend
 app.post('/api/recettes-avec-stock', authenticate, upload.single('image'), (req, res) => {
   try {
+    const licenceKey = req.licence.key;
     let recipeData;
     try {
       recipeData = req.body.data ? JSON.parse(req.body.data) : req.body;
@@ -1169,7 +1136,8 @@ app.post('/api/recettes-avec-stock', authenticate, upload.single('image'), (req,
         quantite: parseFloat(ing.quantite)
       })),
       image: req.file ? `/uploads/${req.file.filename}` : null,
-      user: req.user.userId
+      user: req.user.userId,
+      licenceKey
     };
 
     const createdRecipe = addRecetteWithStockUpdate(newRecipe);
@@ -1183,12 +1151,20 @@ app.post('/api/recettes-avec-stock', authenticate, upload.single('image'), (req,
   }
 });
 
-
 // ===================== ALERTES ROUTES =====================
-
 app.get('/api/alertes', authenticate, (req, res) => {
   try {
-    const alerts = checkStockAlerts();
+    const licenceKey = req.licence.key;
+    const data = loadData();
+    const alerts = data.data.stock
+      .filter(item => item.licenceKey === licenceKey)
+      .filter(item => item.quantite <= (item.seuilAlerte || 5))
+      .map(item => ({
+        id: item.id,
+        nom: item.nom,
+        quantite: item.quantite,
+        seuilAlerte: item.seuilAlerte
+      }));
     res.json(alerts || []);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1196,20 +1172,26 @@ app.get('/api/alertes', authenticate, (req, res) => {
 });
 
 // ===================== RAPPORTS ROUTES =====================
-
 app.get('/api/rapports', authenticate, (req, res) => {
   try {
+    const licenceKey = req.licence.key;
     const data = loadData();
     const rapports = {
-      ventes: data.data.rapports.ventes.map(v => ({
-        ...v,
-      })),
-      depenses: data.data.rapports.depenses.map(d => ({
-        ...d,
-      })),
-      benefices: data.data.rapports.benefices.map(b => ({
-        ...b,
-      }))
+      ventes: data.data.rapports.ventes
+        .filter(vente => vente.licenceKey === licenceKey)
+        .map(v => ({
+          ...v,
+        })),
+      depenses: data.data.rapports.depenses
+        .filter(depense => depense.licenceKey === licenceKey)
+        .map(d => ({
+          ...d,
+        })),
+      benefices: data.data.rapports.benefices
+        .filter(benefice => benefice.licenceKey === licenceKey)
+        .map(b => ({
+          ...b,
+        }))
     };
     res.json(rapports);
   } catch (error) {
@@ -1217,19 +1199,20 @@ app.get('/api/rapports', authenticate, (req, res) => {
   }
 });
 
-
-
 // Staff routes (SuperAdmin)
 app.get('/api/staff', authenticate, (req, res) => {
   try {
+    const licenceKey = req.licence.key;
     const data = loadData();
-    const currentUser = data.data.users.find(u => u.id === req.user.userId);
+    const currentUser = data.data.users.find(u => u.id === req.user.userId && u.licenceKey === licenceKey);
 
     if (!currentUser || currentUser.role !== 'superAdmin') {
       return res.status(403).json({ error: 'Action non autorisée' });
     }
 
-    const staffMembers = data.data.users.filter(user => user.role === 'admin');
+    const staffMembers = data.data.users
+      .filter(user => user.licenceKey === licenceKey)
+      .filter(user => user.role !== 'superAdmin');
     res.json(staffMembers);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1238,15 +1221,16 @@ app.get('/api/staff', authenticate, (req, res) => {
 
 app.post('/api/staff', authenticate, async (req, res) => {
   try {
+    const licenceKey = req.licence.key;
     const data = loadData();
     const { email, password } = req.body;
 
-    const currentUser = data.data.users.find(u => u.id === req.user.userId);
+    const currentUser = data.data.users.find(u => u.id === req.user.userId && u.licenceKey === licenceKey);
     if (!currentUser || currentUser.role !== 'superAdmin') {
       return res.status(403).json({ error: 'Action non autorisée' });
     }
 
-    if (data.data.users.some(u => u.email === email)) {
+    if (data.data.users.some(u => u.email === email && u.licenceKey === licenceKey)) {
       return res.status(400).json({ error: 'Cet email est déjà utilisé' });
     }
 
@@ -1256,7 +1240,8 @@ app.post('/api/staff', authenticate, async (req, res) => {
       passwordHash: await hashPassword(password),
       role: 'admin',
       createdAt: new Date().toISOString(),
-      createdBy: req.user.userId
+      createdBy: req.user.userId,
+      licenceKey
     };
 
     data.data.users.push(newAdmin);
@@ -1274,15 +1259,16 @@ app.post('/api/staff', authenticate, async (req, res) => {
 
 app.delete('/api/staff/:id', authenticate, async (req, res) => {
   try {
+    const licenceKey = req.licence.key;
     const data = loadData();
     const userId = parseInt(req.params.id);
-    const currentUser = data.data.users.find(u => u.id === req.user.userId);
+    const currentUser = data.data.users.find(u => u.id === req.user.userId && u.licenceKey === licenceKey);
 
     if (!currentUser || currentUser.role !== 'superAdmin') {
       return res.status(403).json({ error: 'Action non autorisée' });
     }
 
-    const userToDelete = data.data.users.find(u => u.id === userId);
+    const userToDelete = data.data.users.find(u => u.id === userId && u.licenceKey === licenceKey);
     if (!userToDelete) {
       return res.status(404).json({ error: 'Utilisateur non trouvé' });
     }
@@ -1291,7 +1277,7 @@ app.delete('/api/staff/:id', authenticate, async (req, res) => {
       return res.status(403).json({ error: 'Impossible de supprimer un superAdmin' });
     }
 
-    data.data.users = data.data.users.filter(u => u.id !== userId);
+    data.data.users = data.data.users.filter(u => u.id !== userId && u.licenceKey === licenceKey);
     saveData(data);
     res.json({ success: true });
   } catch (error) {
@@ -1299,33 +1285,27 @@ app.delete('/api/staff/:id', authenticate, async (req, res) => {
   }
 });
 
-
 app.post('/api/verify-password', authenticate, async (req, res) => {
   try {
     const { password } = req.body;
     const userId = req.user.userId;
+    const licenceKey = req.licence.key;
 
-    // 1. Chargement des données
     const data = loadData();
-    
-    // 2. Vérification de l'utilisateur
-    const user = data.data.users.find(u => u.id === userId);
+    const user = data.data.users.find(u => u.id === userId && u.licenceKey === licenceKey);
     if (!user) {
       return res.status(404).json({ error: 'Utilisateur non trouvé' });
     }
 
-    // 3. Vérification du rôle SuperAdmin
     if (user.role !== 'superAdmin') {
-      return res.status(403).json({ error: 'Action réservée aux SuperAdmins' });
+      return res.status(403).json({ error: 'Action réservée aux superAdmin' });
     }
 
-    // 4. Comparaison des mots de passe
     const isValid = await verifyPassword(password, user.passwordHash);
-    
-    // 5. Réponse sécurisée
-    res.json({ 
+
+    res.json({
       valid: isValid,
-      user: { // Ne renvoyez jamais le hash!
+      user: {
         id: user.id,
         email: user.email,
         role: user.role
@@ -1334,17 +1314,16 @@ app.post('/api/verify-password', authenticate, async (req, res) => {
 
   } catch (error) {
     console.error('Erreur de vérification:', error);
-    res.status(400).json({ 
-      error: error.message || 'Erreur lors de la vérification'
+    res.status(400).json({
+      error: error.message || 'Erreur lors de la vérification du mot de passe',
     });
   }
 });
 
-
 // ===================== HISTORIQUE ROUTES =====================
-
 app.get('/api/history', authenticate, (req, res) => {
   try {
+    const licenceKey = req.licence.key;
     const data = loadData();
 
     const actionMap = {
@@ -1364,236 +1343,244 @@ app.get('/api/history', authenticate, (req, res) => {
     };
 
     const usersMap = data.data.users.reduce((acc, user) => {
-      acc[user.id] = user.email;
+      if (user.licenceKey === licenceKey) {
+        acc[user.id] = user.email;
+      }
       return acc;
     }, {});
 
     const productsMap = data.data.stock.reduce((acc, product) => {
-      acc[product.id] = product.nom;
+      if (product.licenceKey === licenceKey) {
+        acc[product.id] = product.nom;
+      }
       return acc;
     }, {});
 
     const recipesMap = data.data.recettes.reduce((acc, recipe) => {
-      acc[recipe.id] = recipe.nom;
+      if (recipe.licenceKey === licenceKey) {
+        acc[recipe.id] = recipe.nom;
+      }
       return acc;
     }, {});
 
     const suppliersMap = {};
     data.data.commandes.forEach(cmd => {
-      if (cmd.fournisseur && cmd.id) {
+      if (cmd.fournisseur && cmd.id && cmd.licenceKey === licenceKey) {
         suppliersMap[cmd.id] = cmd.fournisseur;
       }
     });
 
-    const completeHistory = data.logs.actions.map(log => {
-      const baseEntry = {
-        id: log.id,
-        timestamp: log.timestamp,
-        date: new Date(log.timestamp).toLocaleString(),
-        actionType: actionMap[log.action] || log.action,
-        user: usersMap[log.user] || log.user || 'system'
-      };
+    const completeHistory = data.logs.actions
+      .filter(log => log.licenceKey === licenceKey)
+      .map(log => {
+        const baseEntry = {
+          id: log.id,
+          timestamp: log.timestamp,
+          date: new Date(log.timestamp).toLocaleString(),
+          actionType: actionMap[log.action] || log.action,
+          user: usersMap[log.user] || log.user || 'system'
+        };
 
-      switch (log.action) {
-        case 'ADD_STOCK_ITEM':
-          return {
-            ...baseEntry,
-            details: {
-              productId: data.data.stock.find(p => p.nom === log.details.nom)?.id,
-              nom: log.details.nom,
-              quantite: log.details.quantite,
-              prixAchat: log.details.prixAchat,
-              categorie: log.details.categorie,
-              seuilAlerte: log.details.seuilAlerte
-            }
-          };
+        switch (log.action) {
+          case 'ADD_STOCK_ITEM':
+            return {
+              ...baseEntry,
+              details: {
+                productId: data.data.stock.find(p => p.nom === log.details.nom && p.licenceKey === licenceKey)?.id,
+                nom: log.details.nom,
+                quantite: log.details.quantite,
+                prixAchat: log.details.prixAchat,
+                categorie: log.details.categorie,
+                seuilAlerte: log.details.seuilAlerte
+              }
+            };
 
-        case 'UPDATE_STOCK_ITEM':
-          return {
-            ...baseEntry,
-            details: {
-              productId: data.data.stock.find(p => p.nom === log.details.nom)?.id,
-              nom: log.details.nom,
-              ancienneQuantite: log.details.ancienneQuantite,
-              nouvelleQuantite: log.details.nouvelleQuantite,
-              difference: log.details.nouvelleQuantite - log.details.ancienneQuantite,
-              prixAchat: log.details.prixAchat
-            }
-          };
+          case 'UPDATE_STOCK_ITEM':
+            return {
+              ...baseEntry,
+              details: {
+                productId: data.data.stock.find(p => p.nom === log.details.nom && p.licenceKey === licenceKey)?.id,
+                nom: log.details.nom,
+                ancienneQuantite: log.details.ancienneQuantite,
+                nouvelleQuantite: log.details.nouvelleQuantite,
+                difference: log.details.nouvelleQuantite - log.details.ancienneQuantite,
+                prixAchat: log.details.prixAchat
+              }
+            };
 
-        case 'DELETE_STOCK_ITEM':
-          return {
-            ...baseEntry,
-            details: {
-              nom: log.details.nom,
-              derniereQuantite: log.details.derniereQuantite
-            }
-          };
+          case 'DELETE_STOCK_ITEM':
+            return {
+              ...baseEntry,
+              details: {
+                nom: log.details.nom,
+                derniereQuantite: log.details.derniereQuantite
+              }
+            };
 
-        case 'ADD_COMMANDE':
-          const addedCmd = data.data.commandes.find(c => c.id === log.details.commandeId);
-          return {
-            ...baseEntry,
-            details: {
-              commandeId: addedCmd?.id || log.details.commandeId,
-              fournisseur: addedCmd?.fournisseur || log.details.fournisseur,
-              fournisseurEmail: addedCmd?.fournisseurEmail || log.details.fournisseurEmail,
-              produits: addedCmd?.produits || log.details.produits,
-              montantTotal: addedCmd?.montant || log.details.montantTotal,
-              statut: addedCmd?.statut || 'en_attente',
-              dateCreation: addedCmd?.date || log.timestamp
-            }
-          };
+          case 'ADD_COMMANDE':
+            const addedCmd = data.data.commandes.find(c => c.id === log.details.commandeId && c.licenceKey === licenceKey);
+            return {
+              ...baseEntry,
+              details: {
+                commandeId: addedCmd?.id || log.details.commandeId,
+                fournisseur: addedCmd?.fournisseur || log.details.fournisseur,
+                fournisseurEmail: addedCmd?.fournisseurEmail || log.details.fournisseurEmail,
+                produits: addedCmd?.produits || log.details.produits,
+                montantTotal: addedCmd?.montant || log.details.montantTotal,
+                statut: addedCmd?.statut || 'en_attente',
+                dateCreation: addedCmd?.date || log.timestamp
+              }
+            };
 
-        case 'VALIDER_COMMANDE':
-          const validatedCmd = data.data.commandes.find(c => c.id === log.details.commandeId);
-          return {
-            ...baseEntry,
-            details: {
-              commandeId: validatedCmd?.id || log.details.commandeId,
-              fournisseur: validatedCmd?.fournisseur || log.details.fournisseur,
-              produits: validatedCmd?.produits.map(p => ({
-                nom: p.nom,
-                quantite: p.quantite,
-                prixUnitaire: p.prixUnitaire,
-                montant: p.quantite * p.prixUnitaire,
-                stockAfter: data.data.stock.find(s => s.nom === p.nom)?.quantite
-              })) || log.details.produits,
-              montantTotal: validatedCmd?.montant || log.details.montantTotal,
-              dateValidation: validatedCmd?.dateValidation || log.timestamp,
-              mouvementsStock: data.data.mouvements
-                .filter(m => m.details?.commandeId === log.details.commandeId)
-                .map(m => ({
-                  productId: m.productId,
-                  nom: m.nom,
-                  quantite: m.quantite,
-                  type: m.type,
-                  date: m.date
-                }))
-            }
-          };
+          case 'VALIDER_COMMANDE':
+            const validatedCmd = data.data.commandes.find(c => c.id === log.details.commandeId && c.licenceKey === licenceKey);
+            return {
+              ...baseEntry,
+              details: {
+                commandeId: validatedCmd?.id || log.details.commandeId,
+                fournisseur: validatedCmd?.fournisseur || log.details.fournisseur,
+                produits: validatedCmd?.produits.map(p => ({
+                  nom: p.nom,
+                  quantite: p.quantite,
+                  prixUnitaire: p.prixUnitaire,
+                  montant: p.quantite * p.prixUnitaire,
+                  stockAfter: data.data.stock.find(s => s.nom === p.nom && s.licenceKey === licenceKey)?.quantite
+                })) || log.details.produits,
+                montantTotal: validatedCmd?.montant || log.details.montantTotal,
+                dateValidation: validatedCmd?.dateValidation || log.timestamp,
+                mouvementsStock: data.data.mouvements
+                  .filter(m => m.details?.commandeId === log.details.commandeId && m.licenceKey === licenceKey)
+                  .map(m => ({
+                    productId: m.productId,
+                    nom: m.nom,
+                    quantite: m.quantite,
+                    type: m.type,
+                    date: m.date
+                  }))
+              }
+            };
 
-        case 'ANNULER_COMMANDE':
-          return {
-            ...baseEntry,
-            details: {
-              commandeId: log.details.commandeId,
-              raison: log.details.raison || 'manuelle'
-            }
-          };
+          case 'ANNULER_COMMANDE':
+            return {
+              ...baseEntry,
+              details: {
+                commandeId: log.details.commandeId,
+                raison: log.details.raison || 'manuelle'
+              }
+            };
 
-        case 'ADD_RECETTE':
-          const addedRecipe = data.data.recettes.find(r => r.id === log.details.recetteId);
-          return {
-            ...baseEntry,
-            details: {
-              recetteId: addedRecipe?.id || log.details.recetteId,
-              nom: addedRecipe?.nom || log.details.nom,
-              prix: addedRecipe?.prix || log.details.prix,
-              ingredients: addedRecipe?.ingredients?.map(ing => ({
-                id: ing.id,
-                nom: productsMap[ing.id] || ing.nom,
-                quantite: ing.quantite
-              })) || log.details.ingredients,
-              image: addedRecipe?.image
-            }
-          };
+          case 'ADD_RECETTE':
+            const addedRecipe = data.data.recettes.find(r => r.id === log.details.recetteId && r.licenceKey === licenceKey);
+            return {
+              ...baseEntry,
+              details: {
+                recetteId: addedRecipe?.id || log.details.recetteId,
+                nom: addedRecipe?.nom || log.details.nom,
+                prix: addedRecipe?.prix || log.details.prix,
+                ingredients: addedRecipe?.ingredients?.map(ing => ({
+                  id: ing.id,
+                  nom: productsMap[ing.id] || ing.nom,
+                  quantite: ing.quantite
+                })) || log.details.ingredients,
+                image: addedRecipe?.image
+              }
+            };
 
-        case 'ADD_RECETTE_WITH_STOCK_UPDATE':
-          const recipeWithStock = data.data.recettes.find(r => r.id === log.details.recetteId);
-          return {
-            ...baseEntry,
-            details: {
-              recetteId: recipeWithStock?.id || log.details.recetteId,
-              nom: recipeWithStock?.nom || log.details.nom,
-              ingredients: recipeWithStock?.ingredients?.map(ing => ({
-                id: ing.id,
-                nom: productsMap[ing.id] || ing.nom,
-                quantite: ing.quantite,
-                stockAvant: data.data.stock.find(s => s.id === ing.id)?.quantite,
-                stockApres: data.data.stock.find(s => s.id === ing.id)?.quantite
-              })) || log.details.ingredients,
-              mouvementsAssocies: data.data.mouvements
-                .filter(m => m.details?.recetteId === log.details.recetteId)
-                .map(m => ({
-                  productId: m.productId,
-                  nom: m.nom,
-                  quantite: m.quantite,
-                  type: m.type
-                }))
-            }
-          };
+          case 'ADD_RECETTE_WITH_STOCK_UPDATE':
+            const recipeWithStock = data.data.recettes.find(r => r.id === log.details.recetteId && r.licenceKey === licenceKey);
+            return {
+              ...baseEntry,
+              details: {
+                recetteId: recipeWithStock?.id || log.details.recetteId,
+                nom: recipeWithStock?.nom || log.details.nom,
+                ingredients: recipeWithStock?.ingredients?.map(ing => ({
+                  id: ing.id,
+                  nom: productsMap[ing.id] || ing.nom,
+                  quantite: ing.quantite,
+                  stockAvant: data.data.stock.find(s => s.id === ing.id && s.licenceKey === licenceKey)?.quantite,
+                  stockApres: data.data.stock.find(s => s.id === ing.id && s.licenceKey === licenceKey)?.quantite
+                })) || log.details.ingredients,
+                mouvementsAssocies: data.data.mouvements
+                  .filter(m => m.details?.recetteId === log.details.recetteId && m.licenceKey === licenceKey)
+                  .map(m => ({
+                    productId: m.productId,
+                    nom: m.nom,
+                    quantite: m.quantite,
+                    type: m.type
+                  }))
+              }
+            };
 
-        case 'DELETE_RECETTE':
-          return {
-            ...baseEntry,
-            details: {
-              recetteId: log.details.recetteId,
-              nom: log.details.nom
-            }
-          };
+          case 'DELETE_RECETTE':
+            return {
+              ...baseEntry,
+              details: {
+                recetteId: log.details.recetteId,
+                nom: log.details.nom
+              }
+            };
 
-        case 'ADD_VENTE':
-          const addedSale = data.data.ventes.find(v => v.id === log.details.venteId);
-          return {
-            ...baseEntry,
-            details: {
-              venteId: addedSale?.id || log.details.venteId,
-              recetteId: addedSale?.recetteId,
-              recetteNom: recipesMap[addedSale?.recetteId],
-              quantite: addedSale?.quantite || log.details.quantite,
-              prixTotal: addedSale?.prixTotal || log.details.prixTotal,
-              client: addedSale?.client || log.details.client,
-              statut: addedSale?.statut || 'en_attente'
-            }
-          };
+          case 'ADD_VENTE':
+            const addedSale = data.data.ventes.find(v => v.id === log.details.venteId && v.licenceKey === licenceKey);
+            return {
+              ...baseEntry,
+              details: {
+                venteId: addedSale?.id || log.details.venteId,
+                recetteId: addedSale?.recetteId,
+                recetteNom: recipesMap[addedSale?.recetteId],
+                quantite: addedSale?.quantite || log.details.quantite,
+                prixTotal: addedSale?.prixTotal || log.details.prixTotal,
+                client: addedSale?.client || log.details.client,
+                statut: addedSale?.statut || 'en_attente'
+              }
+            };
 
-        case 'VALIDER_VENTE':
-          const validatedSale = data.data.ventes.find(v => v.id === log.details.venteId);
-          return {
-            ...baseEntry,
-            details: {
-              venteId: validatedSale?.id || log.details.venteId,
-              recetteId: validatedSale?.recetteId,
-              recetteNom: recipesMap[validatedSale?.recetteId],
-              quantite: validatedSale?.quantite || log.details.quantite,
-              prixTotal: validatedSale?.prixTotal || log.details.prixTotal,
-              coutTotal: validatedSale?.coutTotal || log.details.coutTotal,
-              benefice: validatedSale?.benefice || log.details.benefice,
-              ingredientsUtilises: validatedSale?.recette?.ingredients?.map(ing => ({
-                id: ing.id,
-                nom: productsMap[ing.id],
-                quantite: ing.quantite * validatedSale?.quantite,
-                prixUnitaire: data.data.stock.find(s => s.id === ing.id)?.prixAchat
-              })) || [],
-              mouvementsStock: data.data.mouvements
-                .filter(m => m.details?.venteId === log.details.venteId)
-                .map(m => ({
-                  productId: m.productId,
-                  nom: m.nom,
-                  quantite: m.quantite,
-                  type: m.type
-                }))
-            }
-          };
+          case 'VALIDER_VENTE':
+            const validatedSale = data.data.ventes.find(v => v.id === log.details.venteId && v.licenceKey === licenceKey);
+            return {
+              ...baseEntry,
+              details: {
+                venteId: validatedSale?.id || log.details.venteId,
+                recetteId: validatedSale?.recetteId,
+                recetteNom: recipesMap[validatedSale?.recetteId],
+                quantite: validatedSale?.quantite || log.details.quantite,
+                prixTotal: validatedSale?.prixTotal || log.details.prixTotal,
+                coutTotal: validatedSale?.coutTotal || log.details.coutTotal,
+                benefice: validatedSale?.benefice || log.details.benefice,
+                ingredientsUtilises: validatedSale?.recette?.ingredients?.map(ing => ({
+                  id: ing.id,
+                  nom: productsMap[ing.id],
+                  quantite: ing.quantite * validatedSale?.quantite,
+                  prixUnitaire: data.data.stock.find(s => s.id === ing.id && s.licenceKey === licenceKey)?.prixAchat
+                })) || [],
+                mouvementsStock: data.data.mouvements
+                  .filter(m => m.details?.venteId === log.details.venteId && m.licenceKey === licenceKey)
+                  .map(m => ({
+                    productId: m.productId,
+                    nom: m.nom,
+                    quantite: m.quantite,
+                    type: m.type
+                  }))
+              }
+            };
 
-        case 'USER_CREATED':
-          return {
-            ...baseEntry,
-            details: {
-              userId: log.details.userId,
-              email: log.details.email,
-              role: log.details.role
-            }
-          };
+          case 'USER_CREATED':
+            return {
+              ...baseEntry,
+              details: {
+                userId: log.details.userId,
+                email: log.details.email,
+                role: log.details.role
+              }
+            };
 
-        default:
-          return {
-            ...baseEntry,
-            details: log.details
-          };
-      }
-    }).reverse();
+          default:
+            return {
+              ...baseEntry,
+              details: log.details
+            };
+        }
+      }).reverse();
 
     res.json({
       success: true,
@@ -1610,10 +1597,10 @@ app.get('/api/history', authenticate, (req, res) => {
 });
 
 // ===================== INITIALISATION ROUTE =====================
-
 app.post('/api/init', authenticate, (req, res) => {
   try {
-    saveData(initDataStructure());
+    const licenceKey = req.licence.key;
+    saveData(initDataStructure(licenceKey));
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1621,24 +1608,22 @@ app.post('/api/init', authenticate, (req, res) => {
 });
 
 // Error handling middleware
-// Route de base
 app.get('/', (req, res) => {
-  res.send('Bienvenue sur le backend de gestion de stockage !');
+  res.send('Bienvenue sur le backend de gestion de stock');
 });
 
 // Toutes vos autres routes API viendraient ici...
-// (vous devriez avoir toutes vos routes définies avant les middlewares de gestion d'erreurs)
+// (vous devriez avoir toutes vos routes définies avant)
 
-// Error handling middleware (doit être placé APRÈS toutes les autres routes)
+// Error handling middleware (doit être placé APRÈS toutes les routes)
 app.use((req, res) => {
   res.status(404).json({ error: 'Endpoint non trouvé' });
 });
 
 // Server startup
-const PORT = process.env.PORT || 10000; // Utilise le port défini par Render ou 10000 si non défini
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Backend démarré sur http://0.0.0.0:${PORT}`);
-
   console.log('Endpoints disponibles:');
   console.log('• GET    /api/licence/validate');
   console.log('• POST   /api/master/licences/generate');

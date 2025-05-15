@@ -13,34 +13,33 @@ const jwt = require('jsonwebtoken');
 
 function logAction(action, details) {
   const data = loadData();
-  
+
   if (!data.logs) {
     data.logs = { actions: [], errors: [] };
   }
 
-const actionMap = {
-  // Stock
-  'ADD_STOCK_ITEM': 'STOCK_ADD',
-  'UPDATE_STOCK_ITEM': 'STOCK_UPDATE', 
-  'DELETE_STOCK_ITEM': 'STOCK_DELETE',
-  
-  // Commandes
-  'ADD_COMMANDE': 'ORDER_ADD',
-  'VALIDER_COMMANDE': 'ORDER_VALIDATE',
-  'ANNULER_COMMANDE': 'ORDER_CANCEL',
-  
-  // Recettes
-  'ADD_RECETTE': 'RECIPE_ADD',
-  'ADD_RECETTE_WITH_STOCK_UPDATE': 'RECIPE_USE_STOCK',
-  'DELETE_RECETTE': 'RECIPE_DELETE',
-  
-  // Ventes
-  'ADD_VENTE': 'SALE_CREATE',
-  'VALIDER_VENTE': 'SALE_COMPLETE',
-  
-  // Users
-  'USER_CREATED': 'USER_CREATE',
-    
+  const actionMap = {
+    // Stock
+    'ADD_STOCK_ITEM': 'STOCK_ADD',
+    'UPDATE_STOCK_ITEM': 'STOCK_UPDATE',
+    'DELETE_STOCK_ITEM': 'STOCK_DELETE',
+
+    // Commandes
+    'ADD_COMMANDE': 'ORDER_ADD',
+    'VALIDER_COMMANDE': 'ORDER_VALIDATE',
+    'ANNULER_COMMANDE': 'ORDER_CANCEL',
+
+    // Recettes
+    'ADD_RECETTE': 'RECIPE_ADD',
+    'ADD_RECETTE_WITH_STOCK_UPDATE': 'RECIPE_USE_STOCK',
+    'DELETE_RECETTE': 'RECIPE_DELETE',
+
+    // Ventes
+    'ADD_VENTE': 'SALE_CREATE',
+    'VALIDER_VENTE': 'SALE_COMPLETE',
+
+    // Users
+    'USER_CREATED': 'USER_CREATE',
     'USER_LICENCE_UPDATED': 'user_update'
   };
 
@@ -57,7 +56,7 @@ const actionMap = {
 
   data.logs.actions.unshift(logEntry);
   saveData(data);
-  
+
   return logEntry;
 }
 
@@ -82,7 +81,7 @@ function generateAuthToken(user) {
       email: user.email,
       licenceKey: user.licenceKey || null
     },
-    process.env.SECRET_KEY || 'votre_cle_secrete_super_securisee',
+    process.env.SECRET_KEY || 'votre_cle_secrete_super_secrete',
     { expiresIn: '24h' }
   );
 }
@@ -94,7 +93,7 @@ function generateAuthToken(user) {
 async function createUser(userData) {
   const data = loadData();
 
-  if (data.data.users.some(u => u.email === userData.email)) {
+  if (data.data.users.some(u => u.email === userData.email && u.licenceKey === userData.licenceKey)) {
     throw new Error('Email déjà utilisé');
   }
 
@@ -126,9 +125,9 @@ async function createUser(userData) {
   return newUser;
 }
 
-async function findUserByEmail(email) {
+async function findUserByEmail(email, licenceKey) {
   const data = loadData();
-  return data.data.users.find(u => u.email === email);
+  return data.data.users.find(u => u.email === email && u.licenceKey === licenceKey);
 }
 
 async function updateUserLicence(userId, licenceKey) {
@@ -155,9 +154,9 @@ async function updateUserLicence(userId, licenceKey) {
 // STOCK MANAGEMENT
 // ==============================================
 
-function addStockItem(itemData) {
+function addStockItem(itemData, licenceKey) {
   const data = loadData();
-  
+
   const newItem = {
     id: generateId(data.data.stock),
     nom: itemData.nom,
@@ -166,7 +165,8 @@ function addStockItem(itemData) {
     seuilAlerte: parseInt(itemData.seuilAlerte) || 5,
     categorie: itemData.categorie || 'autre',
     dateAjout: new Date().toISOString(),
-    addedBy: itemData.user || 'system'
+    addedBy: itemData.user || 'system',
+    licenceKey
   };
 
   data.data.stock.push(newItem);
@@ -190,17 +190,18 @@ function addStockItem(itemData) {
       source: 'ajout_manuel',
       prixUnitaire: newItem.prixAchat,
       user: itemData.user || 'system'
-    }
+    },
+    licenceKey
   });
 
   saveData(data);
   return newItem;
 }
 
-function updateStockItem(itemData) {
+function updateStockItem(itemData, licenceKey) {
   const data = loadData();
-  const item = data.data.stock.find(i => i.id === itemData.id);
-  
+  const item = data.data.stock.find(i => i.id === itemData.id && i.licenceKey === licenceKey);
+
   if (!item) {
     throw new Error("Produit non trouvé");
   }
@@ -211,7 +212,8 @@ function updateStockItem(itemData) {
   Object.assign(item, {
     ...itemData,
     quantite: parseInt(itemData.quantite) || item.quantite,
-    prixAchat: parseFloat(itemData.prixAchat) || item.prixAchat
+    prixAchat: parseFloat(itemData.prixAchat) || item.prixAchat,
+    licenceKey
   });
 
   if (ancienneQuantite !== item.quantite || ancienPrix !== item.prixAchat) {
@@ -228,7 +230,8 @@ function updateStockItem(itemData) {
         ancienPrix,
         nouveauPrix: item.prixAchat,
         user: itemData.user || 'system'
-      }
+      },
+      licenceKey
     });
   }
 
@@ -246,15 +249,15 @@ function updateStockItem(itemData) {
   return item;
 }
 
-function deleteStockItem(itemId, userId = 'system') {
+function deleteStockItem(itemId, userId = 'system', licenceKey) {
   const data = loadData();
-  const item = data.data.stock.find(item => item.id === itemId);
+  const item = data.data.stock.find(item => item.id === itemId && item.licenceKey === licenceKey);
 
   if (!item) {
     throw new Error("Produit non trouvé");
   }
 
-  data.data.stock = data.data.stock.filter(item => item.id !== itemId);
+  data.data.stock = data.data.stock.filter(item => item.id !== itemId && item.licenceKey === licenceKey);
 
   logAction('DELETE_STOCK_ITEM', {
     productId: item.id,
@@ -272,22 +275,22 @@ function deleteStockItem(itemId, userId = 'system') {
       nom: item.nom,
       derniereQuantite: item.quantite,
       user: userId
-    }
+    },
+    licenceKey
   });
 
   saveData(data);
 }
 
-function checkStockAlerts() {
+function checkStockAlerts(licenceKey) {
   const data = loadData();
-  return data.data.stock.filter(item => item.quantite <= item.seuilAlerte);
+  return data.data.stock.filter(item => item.quantite <= (item.seuilAlerte || 5) && item.licenceKey === licenceKey);
 }
 
 // ==============================================
 // ORDER MANAGEMENT
 // ==============================================
-
-function addCommande(commandeData) {
+function addCommande(commandeData, licenceKey) {
   const data = loadData();
 
   const newCommande = {
@@ -305,7 +308,8 @@ function addCommande(commandeData) {
     statut: commandeData.statut || 'en_attente',
     date: commandeData.date || new Date().toISOString(),
     deliveryDate: commandeData.deliveryDate || null,
-    user: commandeData.user || 'system'
+    user: commandeData.user || 'system',
+    licenceKey
   };
 
   data.data.commandes.push(newCommande);
@@ -323,7 +327,7 @@ function addCommande(commandeData) {
   return newCommande;
 }
 
-function validerCommande(commandeId, userId = 'system') {
+function validerCommande(commandeId, userId = 'system', licenceKey) {
   const data = loadData();
   const commande = data.data.commandes.find(c => c.id === commandeId);
 
@@ -361,7 +365,8 @@ function validerCommande(commandeId, userId = 'system') {
         seuilAlerte: 5,
         categorie: 'nouveau',
         dateAjout: new Date().toISOString(),
-        addedBy: userId
+        addedBy: userId,
+        licenceKey
       };
       data.data.stock.push(stockItem);
     }
@@ -383,7 +388,8 @@ function validerCommande(commandeId, userId = 'system') {
         prixUnitaire: produit.prixUnitaire,
         stockAvant: ancienStock,
         user: userId
-      }
+      },
+      licenceKey
     });
   });
 
@@ -395,7 +401,8 @@ function validerCommande(commandeId, userId = 'system') {
       nom: p.nom,
       quantite: p.quantite,
       prixUnitaire: p.prixUnitaire,
-      stockApres: data.data.stock.find(s => s.nom === p.nom)?.quantite || 0
+      montant: p.quantite * p.prixUnitaire,
+      stockAfter: data.data.stock.find(s => s.nom === p.nom)?.quantite || 0
     })),
     montantTotal: commande.montant,
     user: userId
@@ -408,16 +415,17 @@ function validerCommande(commandeId, userId = 'system') {
     montant: commande.montant,
     date: new Date().toISOString(),
     fournisseur: commande.fournisseur,
-    validatedBy: userId
+    validatedBy: userId,
+    licenceKey
   });
 
   saveData(data);
   return commande;
 }
 
-function annulerCommande(commandeId, userId = 'system') {
+function annulerCommande(commandeId, userId = 'system', licenceKey) {
   const data = loadData();
-  const commande = data.data.commandes.find(c => c.id === commandeId);
+  const commande = data.data.commandes.find(c => c.id === commandeId && c.licenceKey === licenceKey);
 
   if (!commande) {
     throw new Error(`Commande ${commandeId} non trouvée`);
@@ -442,7 +450,7 @@ function annulerCommande(commandeId, userId = 'system') {
 // RECIPE MANAGEMENT
 // ==============================================
 
-function addRecette(recetteData) {
+function addRecette(recetteData, licenceKey) {
   const data = loadData();
 
   const newRecette = {
@@ -453,7 +461,8 @@ function addRecette(recetteData) {
     prix: parseFloat(recetteData.prix) || 0,
     categorie: recetteData.categorie || 'autre',
     dateCreation: new Date().toISOString(),
-    createdBy: recetteData.user || 'system'
+    createdBy: recetteData.user || 'system',
+    licenceKey
   };
 
   data.data.recettes.push(newRecette);
@@ -470,14 +479,14 @@ function addRecette(recetteData) {
   return newRecette;
 }
 
-function addRecetteWithStockUpdate(recetteData) {
+function addRecetteWithStockUpdate(recetteData, licenceKey) {
   const data = loadData();
 
   // Vérification stock
   for (const ingredient of recetteData.ingredients) {
-    const stockItem = data.data.stock.find(item => item.id === ingredient.id);
+    const stockItem = data.data.stock.find(item => item.id === ingredient.id && item.licenceKey === licenceKey);
     if (!stockItem || stockItem.quantite < ingredient.quantite) {
-      throw new Error(`Ingrédient "${stockItem?.nom || ingredient.id}" insuffisant en stock`);
+      throw new Error(`Ingrédient "${stockItem?.nom || ingredient.nom}" en stock insuffisant`);
     }
   }
 
@@ -489,12 +498,13 @@ function addRecetteWithStockUpdate(recetteData) {
     prix: parseFloat(recetteData.prix) || 0,
     categorie: recetteData.categorie || 'autre',
     dateCreation: new Date().toISOString(),
-    createdBy: recetteData.user || 'system'
+    createdBy: recetteData.user || 'system',
+    licenceKey
   };
 
   // Mise à jour stock et mouvements
   for (const ingredient of recetteData.ingredients) {
-    const stockItem = data.data.stock.find(item => item.id === ingredient.id);
+    const stockItem = data.data.stock.find(item => item.id === ingredient.id && item.licenceKey === licenceKey);
     const ancienStock = stockItem.quantite;
     stockItem.quantite -= ingredient.quantite;
 
@@ -510,7 +520,8 @@ function addRecetteWithStockUpdate(recetteData) {
         recetteNom: newRecette.nom,
         stockAvant: ancienStock,
         user: recetteData.user || 'system'
-      }
+      },
+      licenceKey
     });
   }
 
@@ -522,7 +533,7 @@ function addRecetteWithStockUpdate(recetteData) {
     nom: newRecette.nom,
     ingredients: newRecette.ingredients.map(i => ({
       id: i.id,
-      nom: data.data.stock.find(s => s.id === i.id)?.nom,
+      nom: data.data.stock.find(s => s.id === i.id && s.licenceKey === licenceKey)?.nom || i.nom,
       quantite: i.quantite
     })),
     user: recetteData.user || 'system'
@@ -531,9 +542,9 @@ function addRecetteWithStockUpdate(recetteData) {
   return newRecette;
 }
 
-function deleteRecette(recetteId, userId = 'system') {
+function deleteRecette(recetteId, userId = 'system', licenceKey) {
   const data = loadData();
-  const recetteIndex = data.data.recettes.findIndex(r => r.id === recetteId);
+  const recetteIndex = data.data.recettes.findIndex(r => r.id === recetteId && r.licenceKey === licenceKey);
 
   if (recetteIndex === -1) {
     throw new Error("Recette non trouvée");
@@ -554,9 +565,9 @@ function deleteRecette(recetteId, userId = 'system') {
 // SALES MANAGEMENT
 // ==============================================
 
-function addVente(venteData) {
+function addVente(venteData, licenceKey) {
   const data = loadData();
-  const recette = data.data.recettes.find(r => r.id === venteData.recetteId);
+  const recette = data.data.recettes.find(r => r.id === venteData.recetteId && r.licenceKey === licenceKey);
 
   if (!recette) {
     throw new Error("Recette non trouvée");
@@ -571,7 +582,8 @@ function addVente(venteData) {
     date: new Date().toISOString(),
     statut: 'en_attente',
     client: venteData.client || 'anonyme',
-    user: venteData.user || 'system'
+    user: venteData.user || 'system',
+    licenceKey
   };
 
   data.data.ventes.push(newVente);
@@ -590,10 +602,10 @@ function addVente(venteData) {
   return newVente;
 }
 
-function validerVente(venteId, userId = 'system') {
+function validerVente(venteId, userId = 'system', licenceKey) {
   const data = loadData();
-  const vente = data.data.ventes.find(v => v.id === venteId);
-  const recette = data.data.recettes.find(r => r.id === vente.recetteId);
+  const vente = data.data.ventes.find(v => v.id === venteId && v.licenceKey === licenceKey);
+  const recette = data.data.recettes.find(r => r.id === vente.recetteId && r.licenceKey === licenceKey);
 
   if (!vente || !recette) {
     throw new Error("Vente ou recette non trouvée");
@@ -605,24 +617,24 @@ function validerVente(venteId, userId = 'system') {
 
   // Vérification stock
   for (const ingredient of recette.ingredients) {
-    const stockItem = data.data.stock.find(item => item.id === ingredient.id);
+    const stockItem = data.data.stock.find(item => item.id === ingredient.id && item.licenceKey === licenceKey);
     if (!stockItem || stockItem.quantite < (ingredient.quantite * vente.quantite)) {
-      throw new Error(`Stock insuffisant pour ${stockItem?.nom || ingredient.id}`);
+      throw new Error(`Stock insuffisant pour ${stockItem?.nom || ingredient.nom}`);
     }
   }
 
   // Calcul coûts
   let coutTotal = 0;
   recette.ingredients.forEach(ingredient => {
-    const stockItem = data.data.stock.find(item => item.id === ingredient.id);
-    coutTotal += stockItem.prixAchat * ingredient.quantite * vente.quantite;
+    const stockItem = data.data.stock.find(item => item.id === ingredient.id && item.licenceKey === licenceKey);
+    coutTotal += stockItem.prixAchat * ingredient.quantite;
   });
 
   const beneficeTotal = vente.prixTotal - coutTotal;
 
   // Mise à jour stock
   recette.ingredients.forEach(ingredient => {
-    const stockItem = data.data.stock.find(item => item.id === ingredient.id);
+    const stockItem = data.data.stock.find(item => item.id === ingredient.id && item.licenceKey === licenceKey);
     const ancienStock = stockItem.quantite;
     stockItem.quantite -= ingredient.quantite * vente.quantite;
 
@@ -640,7 +652,8 @@ function validerVente(venteId, userId = 'system') {
         prixAchat: stockItem.prixAchat,
         stockAvant: ancienStock,
         user: userId
-      }
+      },
+      licenceKey
     });
   });
 
@@ -659,7 +672,8 @@ function validerVente(venteId, userId = 'system') {
     recetteNom: recette.nom,
     montant: vente.prixTotal,
     date: new Date().toISOString(),
-    validatedBy: userId
+    validatedBy: userId,
+    licenceKey
   });
 
   data.data.rapports.benefices.push({
@@ -668,7 +682,8 @@ function validerVente(venteId, userId = 'system') {
     recetteId: recette.id,
     montant: beneficeTotal,
     date: new Date().toISOString(),
-    validatedBy: userId
+    validatedBy: userId,
+    licenceKey
   });
 
   saveData(data);
