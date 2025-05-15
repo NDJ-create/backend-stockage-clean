@@ -445,19 +445,31 @@ app.get('/api/master/licences', masterLicenceRequired, (req, res) => {
 });
 
 // ===================== ROUTES UTILISATEUR =====================
-app.post('/api/setup', licenceCheckMiddleware, authenticate, async (req, res) => {
+app.post('/api/setup', async (req, res) => {
   try {
+    // Vérification simple de la licence dans le header (sans token)
+    const licenceKey = req.headers['x-licence-key'];
+    if (!licenceKey) {
+      return res.status(401).json({ error: 'Licence key manquante', code: 'MISSING_LICENCE_KEY' });
+    }
+    // Ici tu peux vérifier que la licenceKey est bien valide dans ta base/licence.json etc
+    if (licenceKey !== 'LIC-1-B21585D3') { // Exemple simple
+      return res.status(403).json({ error: 'Licence key invalide', code: 'INVALID_LICENCE_KEY' });
+    }
+
     const data = loadData();
+
     if (data.data.users.length > 0) {
-      return res.status(400).json({ error: 'Le système est déjà configuré' });
+      return res.status(400).json({ error: 'Le système est déjà configuré.' });
     }
 
     const { email, password, secretQuestion, secretAnswer } = req.body;
     if (!email || !password || !secretQuestion || !secretAnswer) {
-      return res.status(400).json({ error: 'Email, mot de passe, question secrète et réponse secrète sont requis' });
+      return res.status(400).json({ error: 'Email, mot de passe, question secrète et réponse sont requis.' });
     }
 
     const hashedPassword = await hashPassword(password);
+
     const superAdmin = {
       id: generateId(data.data.users),
       email,
@@ -465,14 +477,15 @@ app.post('/api/setup', licenceCheckMiddleware, authenticate, async (req, res) =>
       role: 'superAdmin',
       secretQuestion,
       secretAnswer,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      licenceKey
     };
 
     data.data.users.push(superAdmin);
     saveData(data);
 
     const token = jwt.sign(
-      { userId: superAdmin.id, role: superAdmin.role },
+      { userId: superAdmin.id, role: superAdmin.role, licenceKey },
       SECRET_KEY,
       { expiresIn: '24h' }
     );
@@ -485,11 +498,11 @@ app.post('/api/setup', licenceCheckMiddleware, authenticate, async (req, res) =>
         role: superAdmin.role
       }
     });
+
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 });
-
 
 app.post('/api/login', licenceCheckMiddleware, async (req, res) => {
   try {
