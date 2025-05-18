@@ -12,35 +12,26 @@ const jwt = require('jsonwebtoken');
 // ==============================================
 
 function logAction(action, details, licenceKey) {
-  const data = loadData();
+  const data = loadData('main');
 
   if (!data.logs) {
     data.logs = { actions: [], errors: [] };
   }
 
   const actionMap = {
-    // Stock
     'ADD_STOCK_ITEM': 'STOCK_ADD',
     'UPDATE_STOCK_ITEM': 'STOCK_UPDATE',
     'DELETE_STOCK_ITEM': 'STOCK_DELETE',
-
-    // Commandes
     'ADD_COMMANDE': 'ORDER_ADD',
     'VALIDER_COMMANDE': 'ORDER_VALIDATE',
     'ANNULER_COMMANDE': 'ORDER_CANCEL',
-
-    // Recettes
     'ADD_RECETTE': 'RECIPE_ADD',
     'ADD_RECETTE_WITH_STOCK_UPDATE': 'RECIPE_USE_STOCK',
     'DELETE_RECETTE': 'RECIPE_DELETE',
-
-    // Ventes
     'ADD_VENTE': 'SALE_CREATE',
     'VALIDER_VENTE': 'SALE_COMPLETE',
-
-    // Users
     'USER_CREATED': 'USER_CREATE',
-    'USER_LICENCE_UPDATED': 'user_update'
+    'USER_LICENCE_UPDATED': 'USER_UPDATE'
   };
 
   const logEntry = {
@@ -48,7 +39,7 @@ function logAction(action, details, licenceKey) {
     timestamp: new Date().toISOString(),
     action: actionMap[action] || action.toLowerCase(),
     user: details.user || 'system',
-    licenceKey: licenceKey, // Ajout de licenceKey
+    licenceKey: licenceKey,
     details: {
       ...details,
       timestamp: new Date().toISOString()
@@ -56,7 +47,7 @@ function logAction(action, details, licenceKey) {
   };
 
   data.logs.actions.unshift(logEntry);
-  saveData(data);
+  saveData('main', data);
 
   return logEntry;
 }
@@ -82,7 +73,7 @@ function generateAuthToken(user) {
       email: user.email,
       licenceKey: user.licenceKey || null
     },
-    process.env.SECRET_KEY || 'votre_cle_secrete_super_secrete',
+    process.env.SECRET_KEY || 'votre_cle_secrete_super_securisee',
     { expiresIn: '24h' }
   );
 }
@@ -91,15 +82,15 @@ function generateAuthToken(user) {
 // USER MANAGEMENT
 // ==============================================
 
-async function createUser(userData) {
-  const data = loadData();
+async function createUser(userData, licenceKey) {
+  const data = loadData('users');
 
-  if (data.data.users.some(u => u.email === userData.email && u.licenceKey === userData.licenceKey)) {
+  if (data.users.some(u => u.email === userData.email)) {
     throw new Error('Email déjà utilisé');
   }
 
   const newUser = {
-    id: generateId(data.data.users),
+    id: generateId(data.users),
     email: userData.email,
     passwordHash: await hashPassword(userData.password),
     role: userData.role || 'user',
@@ -113,40 +104,44 @@ async function createUser(userData) {
     newUser.secretAnswer = userData.secretAnswer;
   }
 
-  data.data.users.push(newUser);
-  saveData(data);
+  data.users.push(newUser);
+  saveData('users', data);
 
   logAction('USER_CREATED', {
     userId: newUser.id,
     email: newUser.email,
     role: newUser.role,
     user: userData.createdBy || 'system'
-  });
+  }, licenceKey);
 
   return newUser;
 }
 
 async function findUserByEmail(email, licenceKey) {
-  const data = loadData();
-  return data.data.users.find(u => u.email === email && u.licenceKey === licenceKey);
+  const data = loadData('users'); // charge users.json
+
+  // Si users.json est un tableau directement (comme dans ton cas)
+  const users = Array.isArray(data) ? data : (data.users || []);
+
+  return users.find(u => u.email === email && u.licenceKey === licenceKey);
 }
 
 async function updateUserLicence(userId, licenceKey) {
-  const data = loadData();
-  const user = data.data.users.find(u => u.id === userId);
+  const data = loadData('users');
+  const user = data.users.find(u => u.id === userId);
 
   if (!user) {
     throw new Error('Utilisateur non trouvé');
   }
 
   user.licenceKey = licenceKey;
-  saveData(data);
+  saveData('users', data);
 
   logAction('USER_LICENCE_UPDATED', {
     userId: user.id,
     licenceKey,
     user: 'system'
-  });
+  }, licenceKey);
 
   return user;
 }
@@ -156,7 +151,7 @@ async function updateUserLicence(userId, licenceKey) {
 // ==============================================
 
 function addStockItem(itemData, licenceKey) {
-  const data = loadData();
+  const data = loadData('main');
 
   const newItem = {
     id: generateId(data.data.stock),
@@ -179,7 +174,7 @@ function addStockItem(itemData, licenceKey) {
     prixAchat: newItem.prixAchat,
     categorie: newItem.categorie,
     user: itemData.user || 'system'
-  });
+  }, licenceKey);
 
   data.data.mouvements.push({
     id: generateId(data.data.mouvements),
@@ -195,12 +190,12 @@ function addStockItem(itemData, licenceKey) {
     licenceKey
   });
 
-  saveData(data);
+  saveData('main', data);
   return newItem;
 }
 
 function updateStockItem(itemData, licenceKey) {
-  const data = loadData();
+  const data = loadData('main');
   const item = data.data.stock.find(i => i.id === itemData.id && i.licenceKey === licenceKey);
 
   if (!item) {
@@ -244,28 +239,28 @@ function updateStockItem(itemData, licenceKey) {
     ancienPrix,
     nouveauPrix: item.prixAchat,
     user: itemData.user || 'system'
-  });
+  }, licenceKey);
 
-  saveData(data);
+  saveData('main', data);
   return item;
 }
 
 function deleteStockItem(itemId, userId = 'system', licenceKey) {
-  const data = loadData();
+  const data = loadData('main');
   const item = data.data.stock.find(item => item.id === itemId && item.licenceKey === licenceKey);
 
   if (!item) {
     throw new Error("Produit non trouvé");
   }
 
-  data.data.stock = data.data.stock.filter(item => item.id !== itemId && item.licenceKey === licenceKey);
+  data.data.stock = data.data.stock.filter(item => item.id !== itemId || item.licenceKey !== licenceKey);
 
   logAction('DELETE_STOCK_ITEM', {
     productId: item.id,
     nom: item.nom,
     derniereQuantite: item.quantite,
     user: userId
-  });
+  }, licenceKey);
 
   data.data.mouvements.push({
     id: generateId(data.data.mouvements),
@@ -280,19 +275,20 @@ function deleteStockItem(itemId, userId = 'system', licenceKey) {
     licenceKey
   });
 
-  saveData(data);
+  saveData('main', data);
 }
 
 function checkStockAlerts(licenceKey) {
-  const data = loadData();
-  return data.data.stock.filter(item => item.quantite <= (item.seuilAlerte || 5) && item.licenceKey === licenceKey);
+  const data = loadData('main');
+  return data.data.stock.filter(item => item.quantite <= item.seuilAlerte && item.licenceKey === licenceKey);
 }
 
 // ==============================================
 // ORDER MANAGEMENT
 // ==============================================
+
 function addCommande(commandeData, licenceKey) {
-  const data = loadData();
+  const data = loadData('main');
 
   const newCommande = {
     id: commandeData.id || generateId(data.data.commandes),
@@ -314,7 +310,7 @@ function addCommande(commandeData, licenceKey) {
   };
 
   data.data.commandes.push(newCommande);
-  saveData(data);
+  saveData('main', data);
 
   logAction('ADD_COMMANDE', {
     commandeId: newCommande.id,
@@ -323,39 +319,34 @@ function addCommande(commandeData, licenceKey) {
     fournisseur: newCommande.fournisseur,
     montant: newCommande.montant,
     user: commandeData.user || 'system'
-  });
+  }, licenceKey);
 
   return newCommande;
 }
 
 function validerCommande(commandeId, userId = 'system', licenceKey) {
-  const data = loadData();
-  const commande = data.data.commandes.find(c => c.id === commandeId);
+  const data = loadData('main');
 
+  if (!data.data.stock) data.data.stock = [];
+  if (!data.data.mouvements) data.data.mouvements = [];
+  if (!data.data.rapports) data.data.rapports = {};
+  if (!data.data.rapports.depenses) data.data.rapports.depenses = [];
+
+  const commande = data.data.commandes.find(c => c.id === commandeId && c.licenceKey === licenceKey);
   if (!commande) {
-    throw new Error(`Commande ${commandeId} non trouvée`);
+    throw new Error(`Commande ${commandeId} non trouvée ou non autorisée`);
   }
 
   if (commande.statut === 'validée') {
     throw new Error('Commande déjà validée');
   }
 
-  // Log avant modification
-  const produitsAvant = commande.produits.map(p => {
-    const item = data.data.stock.find(s => s.nom === p.nom);
-    return {
-      nom: p.nom,
-      stockAvant: item?.quantite || 0
-    };
-  });
-
-  // Traitement
   commande.statut = 'validée';
   commande.dateValidation = new Date().toISOString();
   commande.validatedBy = userId;
 
   commande.produits.forEach(produit => {
-    let stockItem = data.data.stock.find(item => item.nom === produit.nom);
+    let stockItem = data.data.stock.find(item => item.nom === produit.nom && item.licenceKey === licenceKey);
 
     if (!stockItem) {
       stockItem = {
@@ -367,7 +358,7 @@ function validerCommande(commandeId, userId = 'system', licenceKey) {
         categorie: 'nouveau',
         dateAjout: new Date().toISOString(),
         addedBy: userId,
-        licenceKey
+        licenceKey: licenceKey
       };
       data.data.stock.push(stockItem);
     }
@@ -375,7 +366,6 @@ function validerCommande(commandeId, userId = 'system', licenceKey) {
     const ancienStock = stockItem.quantite;
     stockItem.quantite += produit.quantite;
 
-    // Log mouvement
     data.data.mouvements.push({
       id: generateId(data.data.mouvements),
       productId: stockItem.id,
@@ -390,26 +380,10 @@ function validerCommande(commandeId, userId = 'system', licenceKey) {
         stockAvant: ancienStock,
         user: userId
       },
-      licenceKey
+      licenceKey: licenceKey
     });
   });
 
-  // Log complet
-  logAction('VALIDER_COMMANDE', {
-    commandeId: commande.id,
-    fournisseur: commande.fournisseur,
-    produits: commande.produits.map(p => ({
-      nom: p.nom,
-      quantite: p.quantite,
-      prixUnitaire: p.prixUnitaire,
-      montant: p.quantite * p.prixUnitaire,
-      stockAfter: data.data.stock.find(s => s.nom === p.nom)?.quantite || 0
-    })),
-    montantTotal: commande.montant,
-    user: userId
-  });
-
-  // Rapport financier
   data.data.rapports.depenses.push({
     id: generateId(data.data.rapports.depenses),
     commandeId: commande.id,
@@ -417,34 +391,33 @@ function validerCommande(commandeId, userId = 'system', licenceKey) {
     date: new Date().toISOString(),
     fournisseur: commande.fournisseur,
     validatedBy: userId,
-    licenceKey
+    licenceKey: licenceKey
   });
 
-  saveData(data);
+  saveData('main', data);
+
   return commande;
 }
 
 function annulerCommande(commandeId, userId = 'system', licenceKey) {
-  const data = loadData();
+  const data = loadData('main');
   const commande = data.data.commandes.find(c => c.id === commandeId && c.licenceKey === licenceKey);
 
   if (!commande) {
-    throw new Error(`Commande ${commandeId} non trouvée`);
+    throw new Error(`Commande ${commandeId} non trouvée ou non autorisée`);
   }
 
   commande.statut = 'annulée';
   commande.annulationDate = new Date().toISOString();
   commande.annulatedBy = userId;
 
-  saveData(data);
+  saveData('main', data);
 
   logAction('ANNULER_COMMANDE', {
     commandeId: commande.id,
     raison: 'annulation manuelle',
     user: userId
-  });
-
-  return commande;
+  }, licenceKey);
 }
 
 // ==============================================
@@ -452,7 +425,7 @@ function annulerCommande(commandeId, userId = 'system', licenceKey) {
 // ==============================================
 
 function addRecette(recetteData, licenceKey) {
-  const data = loadData();
+  const data = loadData('main');
 
   const newRecette = {
     id: generateId(data.data.recettes),
@@ -467,7 +440,7 @@ function addRecette(recetteData, licenceKey) {
   };
 
   data.data.recettes.push(newRecette);
-  saveData(data);
+  saveData('main', data);
 
   logAction('ADD_RECETTE', {
     recetteId: newRecette.id,
@@ -475,19 +448,18 @@ function addRecette(recetteData, licenceKey) {
     prix: newRecette.prix,
     ingredients: newRecette.ingredients,
     user: recetteData.user || 'system'
-  });
+  }, licenceKey);
 
   return newRecette;
 }
 
 function addRecetteWithStockUpdate(recetteData, licenceKey) {
-  const data = loadData();
+  const data = loadData('main');
 
-  // Vérification stock
   for (const ingredient of recetteData.ingredients) {
-    const stockItem = data.data.stock.find(item => item.id === ingredient.id && item.licenceKey === licenceKey);
+    const stockItem = data.data.stock.find(item => item.nom === ingredient.nom && item.licenceKey === licenceKey);
     if (!stockItem || stockItem.quantite < ingredient.quantite) {
-      throw new Error(`Ingrédient "${stockItem?.nom || ingredient.nom}" en stock insuffisant`);
+      throw new Error(`Ingrédient "${stockItem?.nom || ingredient.nom}" insuffisant en stock`);
     }
   }
 
@@ -503,9 +475,8 @@ function addRecetteWithStockUpdate(recetteData, licenceKey) {
     licenceKey
   };
 
-  // Mise à jour stock et mouvements
   for (const ingredient of recetteData.ingredients) {
-    const stockItem = data.data.stock.find(item => item.id === ingredient.id && item.licenceKey === licenceKey);
+    const stockItem = data.data.stock.find(item => item.nom === ingredient.nom && item.licenceKey === licenceKey);
     const ancienStock = stockItem.quantite;
     stockItem.quantite -= ingredient.quantite;
 
@@ -527,24 +498,27 @@ function addRecetteWithStockUpdate(recetteData, licenceKey) {
   }
 
   data.data.recettes.push(newRecette);
-  saveData(data);
+  saveData('main', data);
 
   logAction('ADD_RECETTE_WITH_STOCK_UPDATE', {
     recetteId: newRecette.id,
     nom: newRecette.nom,
-    ingredients: newRecette.ingredients.map(i => ({
-      id: i.id,
-      nom: data.data.stock.find(s => s.id === i.id && s.licenceKey === licenceKey)?.nom || i.nom,
-      quantite: i.quantite
-    })),
+    ingredients: newRecette.ingredients.map(i => {
+      const s = data.data.stock.find(stock => stock.nom === i.nom && stock.licenceKey === licenceKey);
+      return {
+        id: i.id,
+        nom: s?.nom || 'Inconnu',
+        quantite: i.quantite
+      };
+    }),
     user: recetteData.user || 'system'
-  });
+  }, licenceKey);
 
   return newRecette;
 }
 
 function deleteRecette(recetteId, userId = 'system', licenceKey) {
-  const data = loadData();
+  const data = loadData('main');
   const recetteIndex = data.data.recettes.findIndex(r => r.id === recetteId && r.licenceKey === licenceKey);
 
   if (recetteIndex === -1) {
@@ -553,13 +527,13 @@ function deleteRecette(recetteId, userId = 'system', licenceKey) {
 
   const recette = data.data.recettes[recetteIndex];
   data.data.recettes.splice(recetteIndex, 1);
-  saveData(data);
+  saveData('main', data);
 
   logAction('DELETE_RECETTE', {
     recetteId: recette.id,
     nom: recette.nom,
     user: userId
-  });
+  }, licenceKey);
 }
 
 // ==============================================
@@ -567,7 +541,7 @@ function deleteRecette(recetteId, userId = 'system', licenceKey) {
 // ==============================================
 
 function addVente(venteData, licenceKey) {
-  const data = loadData();
+  const data = loadData('main');
   const recette = data.data.recettes.find(r => r.id === venteData.recetteId && r.licenceKey === licenceKey);
 
   if (!recette) {
@@ -588,7 +562,7 @@ function addVente(venteData, licenceKey) {
   };
 
   data.data.ventes.push(newVente);
-  saveData(data);
+  saveData('main', data);
 
   logAction('ADD_VENTE', {
     venteId: newVente.id,
@@ -598,13 +572,13 @@ function addVente(venteData, licenceKey) {
     prixTotal: newVente.prixTotal,
     client: newVente.client,
     user: venteData.user || 'system'
-  });
+  }, licenceKey);
 
   return newVente;
 }
 
 function validerVente(venteId, userId = 'system', licenceKey) {
-  const data = loadData();
+  const data = loadData('main');
   const vente = data.data.ventes.find(v => v.id === venteId && v.licenceKey === licenceKey);
   const recette = data.data.recettes.find(r => r.id === vente.recetteId && r.licenceKey === licenceKey);
 
@@ -616,26 +590,23 @@ function validerVente(venteId, userId = 'system', licenceKey) {
     throw new Error("Vente déjà validée");
   }
 
-  // Vérification stock
   for (const ingredient of recette.ingredients) {
-    const stockItem = data.data.stock.find(item => item.id === ingredient.id && item.licenceKey === licenceKey);
+    const stockItem = data.data.stock.find(item => item.nom === ingredient.nom && item.licenceKey === licenceKey);
     if (!stockItem || stockItem.quantite < (ingredient.quantite * vente.quantite)) {
       throw new Error(`Stock insuffisant pour ${stockItem?.nom || ingredient.nom}`);
     }
   }
 
-  // Calcul coûts
   let coutTotal = 0;
   recette.ingredients.forEach(ingredient => {
-    const stockItem = data.data.stock.find(item => item.id === ingredient.id && item.licenceKey === licenceKey);
+    const stockItem = data.data.stock.find(item => item.nom === ingredient.nom && item.licenceKey === licenceKey);
     coutTotal += stockItem.prixAchat * ingredient.quantite;
   });
 
   const beneficeTotal = vente.prixTotal - coutTotal;
 
-  // Mise à jour stock
   recette.ingredients.forEach(ingredient => {
-    const stockItem = data.data.stock.find(item => item.id === ingredient.id && item.licenceKey === licenceKey);
+    const stockItem = data.data.stock.find(item => item.nom === ingredient.nom && item.licenceKey === licenceKey);
     const ancienStock = stockItem.quantite;
     stockItem.quantite -= ingredient.quantite * vente.quantite;
 
@@ -658,14 +629,12 @@ function validerVente(venteId, userId = 'system', licenceKey) {
     });
   });
 
-  // Mise à jour vente
   vente.statut = 'validée';
   vente.dateValidation = new Date().toISOString();
   vente.coutTotal = coutTotal;
   vente.benefice = beneficeTotal;
   vente.validatedBy = userId;
 
-  // Rapports financiers
   data.data.rapports.ventes.push({
     id: generateId(data.data.rapports.ventes),
     venteId: vente.id,
@@ -687,7 +656,7 @@ function validerVente(venteId, userId = 'system', licenceKey) {
     licenceKey
   });
 
-  saveData(data);
+  saveData('main', data);
 
   logAction('VALIDER_VENTE', {
     venteId: vente.id,
@@ -699,12 +668,51 @@ function validerVente(venteId, userId = 'system', licenceKey) {
     benefice: beneficeTotal,
     client: vente.client,
     user: userId
-  });
+  }, licenceKey);
 
   return {
     vente: vente,
     benefice: beneficeTotal
   };
+}
+
+
+// Utilisez toujours 'main' comme fileKey
+function addStaffMember(staffData, licenceKey) {
+  const data = loadData('main');
+
+  if (!data.data.staff) data.data.staff = [];
+
+  const newStaff = {
+    id: generateId(data.data.staff),
+    ...staffData,
+    licenceKey, // Assurez-vous que la clé de licence est associée au membre du personnel
+    createdAt: new Date().toISOString()
+  };
+
+  data.data.staff.push(newStaff);
+  saveData('main', data);
+  return newStaff;
+}
+
+function getStaffMembers(licenceKey) {
+  const data = loadData('main');
+  return (data.data.staff || []).filter(staff => staff.licenceKey === licenceKey);
+}
+
+function removeStaffMember(staffId, licenceKey) {
+  const data = loadData('main');
+
+  if (!data.data.staff) data.data.staff = [];
+
+  data.data.staff = data.data.staff.filter(member => !(member.id === staffId && member.licenceKey === licenceKey));
+
+  saveData('main', data);
+}
+
+function getUserById(userId, licenceKey) {
+  const users = loadData('users');
+  return users.users.find(user => user.id === userId && user.licenceKey === licenceKey);
 }
 
 // ==============================================
@@ -726,7 +734,6 @@ module.exports = {
   createUser,
   findUserByEmail,
   updateUserLicence,
-
   // Stock
   addStockItem,
   updateStockItem,
@@ -742,8 +749,13 @@ module.exports = {
   addRecette,
   addRecetteWithStockUpdate,
   deleteRecette,
-
+  
+  addStaffMember,
+  removeStaffMember,
+  getStaffMembers,
+  getUserById,  
   // Ventes
   addVente,
   validerVente
 };
+

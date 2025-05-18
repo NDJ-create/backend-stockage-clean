@@ -1,55 +1,79 @@
 {
-  "restaurant": "restaurant-stock",
-  "date": "2025-05-13T00:00:00.000Z",
-  "data": {
-    "users": [
-      {
-        "id": 1,
-        "email": "admin@restaurant.com",
-        "passwordHash": "$2b$10$yuRGVvJfSNIS8/0ITg9er.8t9qVqhbotgAC27f/aiy45/5bk6ktY2",
-        "role": "superAdmin",
-        "secretQuestion": "Quel est le nom de ta femme",
-        "secretAnswer": "Gertrude",
-        "createdAt": "2025-05-15T22:43:39.808Z",
-        "licenceKey": "LIC-1-B21585D3"
-      }
-    ],
-    "stock": [],
-    "commandes": [],
-    "recettes": [],
-    "ventes": [],
-    "staff": [],
-    "rapports": {
-      "ventes": [],
-      "depenses": [],
-      "benefices": []
-    },
-    "mouvements": []
-  },
-  "logs": {
-    "actions": [],
-    "erreurs": []
-  },
-  "licences": [
+  "mouvements": [
     {
       "id": 1,
-      "key": "LIC-1-B21585D3",
-      "isMaster": true,
-      "clientInfo": {
-        "name": "MASTER_LICENCE_ADMIN",
-        "email": "admin@restaurant.com",
-        "isMaster": true
-      },
-      "createdAt": "2025-05-05T23:26:06.258Z",
-      "expiresAt": null,
-      "isActive": true,
-      "used": false,
-      "usedAt": null,
-      "usedBy": null,
-      "createdBy": "system",
-      "durationType": "infinite",
-      "isFirstUse": true
+      "productId": 1,
+      "type": "ajout",
+      "quantite": 10,
+      "date": "2025-05-15T23:09:31.635Z",
+      "details": {
+        "source": "ajout_manuel",
+        "prixUnitaire": 3500,
+        "user": 1
+      }
+    },
+    {
+      "id": 2,
+      "productId": 2,
+      "type": "ajout",
+      "quantite": 20,
+      "date": "2025-05-16T01:57:23.648Z",
+      "details": {
+        "source": "ajout_manuel",
+        "prixUnitaire": 1500,
+        "user": 1
+      }
+    },
+    {
+      "id": 3,
+      "productId": 3,
+      "type": "ajout",
+      "quantite": 100,
+      "date": "2025-05-16T02:16:56.096Z",
+      "details": {
+        "source": "ajout_manuel",
+        "prixUnitaire": 10.99,
+        "user": 1
+      }
+    },
+    {
+      "id": 4,
+      "productId": 4,
+      "type": "ajout",
+      "quantite": 50,
+      "date": "2025-05-16T02:25:35.855Z",
+      "details": {
+        "source": "ajout_manuel",
+        "prixUnitaire": 15.99,
+        "user": 1
+      }
+    },
+    {
+      "id": 1747412881292,
+      "produitId": 1747412881281,
+      "type": "ajout",
+      "quantite": 25,
+      "date": "2025-05-16T16:28:01.292Z",
+      "userId": 1,
+      "licenceKey": "LIC-1-B21585D3"
+    },
+    {
+      "id": 1747414900919,
+      "produitId": 1,
+      "nom": "Riz parfumé 5kg",
+      "type": "réapprovisionnement",
+      "quantite": 5,
+      "date": "2025-05-16T17:01:40.919Z",
+      "userId": 1,
+      "licenceKey": "LIC-1-B21585D3",
+      "details": {
+        "stockBefore": 20,
+        "stockAfter": 25,
+        "prixUnitaire": 3500,
+        "categorie": "alimentaire",
+        "seuilAlerte": 3
+      }
     }
   ],
-  "historique": []
+  "actions": []
 }

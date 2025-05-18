@@ -2,44 +2,44 @@ const fs = require('fs');
 const path = require('path');
 
 // Chemins des fichiers
-const filePath = path.join(__dirname, 'data/historique.json');
-const LICENCE_FILE = path.join(__dirname, 'licences.json');
-const LICENCE_LOG_FILE = path.join(__dirname, 'licence_logs.json');
+const DATA_FILES = {
+  main: path.join(__dirname, 'data/main.json'),
+  users: path.join(__dirname, 'data/users.json'),
+  licences: path.join(__dirname, 'data/licences.json'),
+  licenceLog: path.join(__dirname, 'data/licence_logs.json')
+};
 
-// --------------------------------------
-// STRUCTURES DE DONNÉES
-// --------------------------------------
-
+// Structure de données initiale pour main.json
 function initDataStructure() {
   return {
-    meta: { 
-      appName: 'gestion-stock-restaurant', 
-      version: '1.0.0' 
+    meta: {
+      appName: 'gestion-stock-restaurant',
+      version: '1.0.0'
     },
-    system: { 
-      lastUpdate: new Date().toISOString() 
+    system: {
+      lastUpdate: new Date().toISOString()
     },
     data: {
       stock: [],
       recettes: [],
       commandes: [],
       ventes: [],
+      staff: [],     
       mouvements: [],
-      rapports: { 
-        ventes: [], 
-        depenses: [], 
-        benefices: [] 
-      },
-      users: [],
-      licences: []
+      rapports: {
+        ventes: [],
+        depenses: [],
+        benefices: []
+      }
     },
-    logs: { 
-      actions: [], 
-      errors: [] 
+    logs: {
+      actions: [],
+      errors: []
     }
   };
 }
 
+// Structure de données initiale pour licences.json
 function initLicenceStructure() {
   return {
     version: 2,
@@ -52,63 +52,92 @@ function initLicenceStructure() {
   };
 }
 
-// --------------------------------------
-// FONCTIONS PRINCIPALES
-// --------------------------------------
-
-function loadData(file = filePath) {
+// Charger les données
+function loadData(fileKey) {
   try {
-    // Crée le dossier si inexistant
-    if (!fs.existsSync(path.dirname(file))) {
-      fs.mkdirSync(path.dirname(file), { recursive: true });
+    // Créer le dossier si inexistant
+    if (!fs.existsSync(path.dirname(DATA_FILES[fileKey]))) {
+      fs.mkdirSync(path.dirname(DATA_FILES[fileKey]), { recursive: true });
     }
 
-    // Crée le fichier avec structure vide si inexistant
-    if (!fs.existsSync(file)) {
-      const data = file === LICENCE_FILE ? initLicenceStructure() : initDataStructure();
-      fs.writeFileSync(file, JSON.stringify(data, null, 2));
-      return data;
+    // Créer le fichier avec structure initiale si inexistant
+    if (!fs.existsSync(DATA_FILES[fileKey])) {
+      let initialData;
+      switch(fileKey) {
+        case 'licences':
+          initialData = initLicenceStructure();
+          break;
+        case 'main':
+          initialData = initDataStructure();
+          break;
+        case 'users':
+          initialData = { users: [] };
+          break;
+        case 'licenceLog':
+          initialData = { logs: [] };
+          break;
+        default:
+          initialData = {};
+      }
+      fs.writeFileSync(DATA_FILES[fileKey], JSON.stringify(initialData, null, 2));
+      return initialData;
     }
 
-    // Lit le fichier existant
-    const content = fs.readFileSync(file, 'utf-8');
-    return JSON.parse(content);
+    // Lire le fichier existant
+    const content = fs.readFileSync(DATA_FILES[fileKey], 'utf8');
+    const parsed = JSON.parse(content);
+
+    // Si c'est users.json et que c'est un tableau, retourner le tableau
+    if (fileKey === 'users' && Array.isArray(parsed)) {
+      return parsed;
+    }
+
+    return parsed;
+
   } catch (error) {
-    console.error("Erreur de chargement:", error);
-    return file === LICENCE_FILE ? initLicenceStructure() : initDataStructure();
+    console.error(`Erreur loadData(${fileKey}):`, error);
+    return fileKey === 'licences' ? initLicenceStructure() : {};
   }
 }
 
-function saveData(data, file = filePath) {
+function saveData(fileKey, data) {
   try {
-    if (!data) {
-      throw new Error("Aucune donnée à sauvegarder");
-    }
-
-    // Mise à jour du timestamp pour le fichier principal
-    if (file === filePath && data.system) {
-      data.system.lastUpdate = new Date().toISOString();
-    }
-
-    fs.writeFileSync(file, JSON.stringify(data, null, 2));
+    if (!data) throw new Error("Données manquantes");
+    fs.writeFileSync(DATA_FILES[fileKey], JSON.stringify(data, null, 2));
     return true;
   } catch (error) {
-    console.error("Erreur de sauvegarde:", error);
+    console.error(`Erreur saveData(${fileKey}):`, error);
     throw error;
   }
 }
 
-function updateStockForOrder(ingredients) {
-  const data = loadData();
-  
+// Générer un ID
+function generateId(items = []) {
+  return items.length > 0 ? Math.max(...items.map(item => item.id)) + 1 : 1;
+}
+
+// Fonction pour mettre à jour le stock pour une commande
+function updateStockForOrder(ingredients, licenceKey) {
+  const data = loadData('main');
+
   try {
-    // Vérification et réduction du stock
     const updates = ingredients.map(ing => {
-      const item = data.data.stock.find(i => i.id === ing.id);
-      if (!item) throw new Error(`Ingrédient ${ing.id} introuvable`);
+      const item = data.data.stock.find(i => i.id === ing.id && i.licenceKey === licenceKey);
+      if (!item) throw new Error(`Ingrédient ${ing.id} non trouvé`);
       if (item.quantite < ing.quantite) throw new Error(`Stock insuffisant pour ${item.nom}`);
-      
+
       item.quantite -= ing.quantite;
+
+      // Ajout mouvement historique
+      data.data.mouvements.push({
+        id: generateId(data.data.mouvements),
+        produitId: item.id,
+        type: 'sortie',
+        quantite: ing.quantite,
+        date: new Date().toISOString(),
+        licenceKey: item.licenceKey
+      });
+
       return {
         id: item.id,
         nom: item.nom,
@@ -117,54 +146,42 @@ function updateStockForOrder(ingredients) {
       };
     });
 
-    // Sauvegarde unique
-    saveData(data);
+    saveData('main', data);
     return updates;
-    
+
   } catch (error) {
     console.error("Erreur updateStockForOrder:", error);
     throw error;
   }
 }
 
-function generateId(items = []) {
-  return items.length > 0 ? Math.max(...items.map(item => item.id)) + 1 : 1;
-}
-
-// --------------------------------------
-// FONCTIONS SPÉCIFIQUES AUX LICENCES
-// --------------------------------------
-
+// Fonctions pour gérer les licences
 function loadLicenceData() {
-  return loadData(LICENCE_FILE);
+  return loadData('licences');
 }
 
 function saveLicenceData(data) {
-  return saveData(data, LICENCE_FILE);
+  return saveData('licences', data);
 }
 
 function loadLicenceLogs() {
-  return loadData(LICENCE_LOG_FILE);
+  return loadData('licenceLog');
 }
 
 function saveLicenceLogs(data) {
-  return saveData(data, LICENCE_LOG_FILE);
+  return saveData('licenceLog', data);
 }
 
-// --------------------------------------
-// EXPORTS
-// --------------------------------------
-
+// Exports
 module.exports = {
-  // Core functions
   initDataStructure,
   loadData,
   saveData,
   generateId,
   updateStockForOrder,
-  // Licence functions
   loadLicenceData,
   saveLicenceData,
   loadLicenceLogs,
   saveLicenceLogs
 };
+

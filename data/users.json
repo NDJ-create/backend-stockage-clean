@@ -1,2 +1,12 @@
-[]
-
+[
+  {
+    "id": 1,
+    "email": "admin@restaurant.com",
+    "passwordHash": "$2b$10$pSgtB5AKE4p.a9NG.ijshuF/9Uq0VgDQKiAraohl.S3eAC71l1g8W",
+    "role": "superAdmin",
+    "secretQuestion": "Quel est le nom de ta femme",
+    "secretAnswer": "Gertrude",
+    "createdAt": "2025-05-16T13:18:58.376Z",
+    "licenceKey": "LIC-1-B21585D3"
+  }
+]

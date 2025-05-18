@@ -1,0 +1,108 @@
+{
+  "meta": {
+    "appName": "gestion-stock-restaurant",
+    "version": "1.0.0"
+  },
+  "system": {
+    "lastUpdate": "2025-05-17T00:00:00.000Z"
+  },
+  "data": {
+    "stock": [
+      {
+        "id": 1,
+        "nom": "Nouvel Ingrédient",
+        "quantite": 8,
+        "prixAchat": 50,
+        "seuilAlerte": 2,
+        "categorie": "autre",
+        "dateAjout": "2025-05-18T00:59:15.348Z",
+        "addedBy": 1,
+        "licenceKey": "LIC-1-B21585D3"
+      }
+    ],
+    "recettes": [
+      {
+        "id": 1,
+        "nom": "Recette avec Nouvel Ingrédient",
+        "ingredients": [
+          {
+            "id": 1,
+            "nom": "Nouvel Ingrédient",
+            "quantite": 2
+          }
+        ],
+        "image": "",
+        "prix": 1000,
+        "categorie": "autre",
+        "dateCreation": "2025-05-18T01:00:04.216Z",
+        "createdBy": 1,
+        "licenceKey": "LIC-1-B21585D3"
+      }
+    ],
+    "commandes": [],
+    "ventes": [],
+    "mouvements": [
+      {
+        "id": 1,
+        "productId": 1,
+        "type": "ajout",
+        "quantite": 10,
+        "date": "2025-05-18T00:59:15.349Z",
+        "details": {
+          "source": "ajout_manuel",
+          "prixUnitaire": 50,
+          "user": 1
+        },
+        "licenceKey": "LIC-1-B21585D3"
+      },
+      {
+        "id": 2,
+        "productId": 1,
+        "nom": "Nouvel Ingrédient",
+        "type": "utilisation_recette",
+        "quantite": -2,
+        "date": "2025-05-18T01:00:04.217Z",
+        "details": {
+          "recetteId": 1,
+          "recetteNom": "Recette avec Nouvel Ingrédient",
+          "stockAvant": 10,
+          "user": 1
+        },
+        "licenceKey": "LIC-1-B21585D3"
+      }
+    ],
+    "staff": [],
+    "rapports": {
+      "ventes": [],
+      "depenses": [],
+      "benefices": []
+    },
+    "users": [],
+    "licences": []
+  },
+  "logs": {
+    "actions": [
+      {
+        "id": 1,
+        "timestamp": "2025-05-18T01:00:04.218Z",
+        "action": "RECIPE_USE_STOCK",
+        "user": 1,
+        "licenceKey": "LIC-1-B21585D3",
+        "details": {
+          "recetteId": 1,
+          "nom": "Recette avec Nouvel Ingrédient",
+          "ingredients": [
+            {
+              "id": 1,
+              "nom": "Nouvel Ingrédient",
+              "quantite": 2
+            }
+          ],
+          "user": 1,
+          "timestamp": "2025-05-18T01:00:04.218Z"
+        }
+      }
+    ],
+    "errors": []
+  }
+}

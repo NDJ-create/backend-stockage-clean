@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 require('dotenv').config();
-
+const bcrypt = require('bcryptjs');  // Ajoutez cette ligne
 const { LICENCE_SETTINGS } = require('./config');
 const {
   generateLicence,
@@ -37,6 +37,10 @@ const {
   addVente,
   updateStockForOrder,
   validerVente,
+  addStaffMember,
+  getUserById,
+  removeStaffMember,
+  getStaffMembers,
   hashPassword,
   verifyPassword,
   createUser,
@@ -109,43 +113,75 @@ app.use('/uploads', express.static(uploadDir, {
   }
 }));
 
-// Authentication middleware
+// Middleware d'authentification standard
 function authenticate(req, res, next) {
-  const token = req.header('Authorization')?.split(' ')[1];
-  
+  const authHeader = req.header('Authorization');
+  const token = authHeader ? authHeader.split(' ')[1] : null;
+
   if (!token) {
-    return res.status(401).json({ 
+    return res.status(401).json({
       error: 'Token manquant',
       code: 'MISSING_TOKEN'
     });
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.SECRET_KEY);
-    
-    if (!decoded.licenceKey) {
-      return res.status(403).json({ 
-        error: 'LicenceKey manquante dans le token',
-        code: 'MISSING_LICENCE_KEY' 
-      });
-    }
-
+    const decoded = jwt.verify(token, SECRET_KEY);
     req.user = decoded;
-    req.licence = { key: decoded.licenceKey };
-    
+    req.licence = { key: decoded.licenceKey }; // <-- ici on ajoute la licence
     next();
   } catch (err) {
-    console.error('Erreur de vérification du token:', {
-      error: err.message,
-      token: token.substring(0, 10) + '...'
-    });
     res.status(401).json({
-      error: 'Token invalide',
+      error: 'Token invalide ou expiré',
       code: 'INVALID_TOKEN'
     });
   }
 }
+// Authentication middleware
+async function licenceCheckMiddleware(req, res, next) {
+  try {
+    const licenceKey = req.headers['x-licence-key'];
 
+    if (!licenceKey) {
+      return res.status(400).json({
+        error: 'LicenceKey manquante dans les headers',
+        code: 'MISSING_LICENCE_KEY'
+      });
+    }
+
+    const licenceData = await loadData('licences');
+
+    // Recherche la licence correspondant à la clé
+    const licence = Array.isArray(licenceData)
+      ? licenceData.find(l => l.key === licenceKey)
+      : licenceData.licences?.find(l => l.key === licenceKey);
+
+    if (!licence) {
+      return res.status(403).json({
+        error: 'Licence inconnue',
+        code: 'UNKNOWN_LICENCE'
+      });
+    }
+
+    if (licence.revoked || licenceData.revokedKeys?.includes(licenceKey)) {
+      return res.status(403).json({
+        error: 'Licence révoquée',
+        code: 'REVOKED_LICENCE'
+      });
+    }
+
+    // Attache la licence valide à la requête
+    req.licence = { key: licenceKey, data: licence };
+
+    next();
+  } catch (error) {
+    console.error('Erreur licenceCheckMiddleware:', error);
+    res.status(500).json({
+      error: 'Erreur de vérification de licence',
+      code: 'LICENCE_CHECK_ERROR'
+    });
+  }
+}
 // Nouveau middleware masterLicenceRequired
 function masterLicenceRequired(req, res, next) {
   const licenceKey = req.headers['x-licence-key'] ||
@@ -201,54 +237,7 @@ function masterLicenceRequired(req, res, next) {
 }
 
 // Licence check middleware
-function licenceCheckMiddleware(req, res, next) {
-  const exemptedRoutes = [
-    '/api/licence/validate',
-    '/api/setup',
-    '/api/login',
-    '/api/reset-password'
-  ];
 
-  if (exemptedRoutes.some(route => req.path.startsWith(route))) {
-    return next();
-  }
-
-  const licenceKey = req.headers['x-licence-key'];
-
-  console.log('[Licence Check] Route:', req.path, 'Key:', licenceKey);
-
-  if (licenceKey === MASTER_API_KEY) {
-    console.log('[Licence Check] Accès master autorisé');
-    return next();
-  }
-
-  try {
-    if (!licenceKey) {
-      throw new Error('Licence requise. Header manquant');
-    }
-
-    const validation = validateLicence(licenceKey);
-
-    if (!validation.valid) {
-      throw new Error(validation.reason || 'Licence invalide');
-    }
-
-    req.licence = {
-      key: licenceKey,
-      ...validation.licenceData
-    };
-
-    next();
-  } catch (error) {
-    console.error('[Licence Check] Erreur:', error.message);
-    return res.status(403).json({
-      error: 'Accès refusé',
-      details: error.message,
-      code: 'LICENCE_CHECK_FAILED',
-      solution: 'Vérifiez votre clé de licence ou contactez le support'
-    });
-  }
-}
 
 // ===================== ROUTES LICENCE =====================
 app.post('/api/licence/validate', (req, res) => {
@@ -447,31 +436,28 @@ app.get('/api/master/licences', masterLicenceRequired, (req, res) => {
 // ===================== ROUTES UTILISATEUR =====================
 app.post('/api/setup', async (req, res) => {
   try {
-    // Vérification simple de la licence dans le header (sans token)
+    // Vérification de la licence
     const licenceKey = req.headers['x-licence-key'];
-    if (!licenceKey) {
-      return res.status(401).json({ error: 'Licence key manquante', code: 'MISSING_LICENCE_KEY' });
-    }
-    // Ici tu peux vérifier que la licenceKey est bien valide dans ta base/licence.json etc
-    if (licenceKey !== 'LIC-1-B21585D3') { // Exemple simple
-      return res.status(403).json({ error: 'Licence key invalide', code: 'INVALID_LICENCE_KEY' });
+    if (!licenceKey || licenceKey !== 'LIC-1-B21585D3') {
+      return res.status(403).json({ error: 'Licence key invalide' });
     }
 
-    const data = loadData();
+    // Charge les utilisateurs (avec le bon fileKey)
+    const users = await loadData('users'); // <-- ICI le changement clé
 
-    if (data.data.users.length > 0) {
-      return res.status(400).json({ error: 'Le système est déjà configuré.' });
+    if (users.length > 0) {
+      return res.status(400).json({ error: 'Le système a déjà été initialisé' });
     }
 
     const { email, password, secretQuestion, secretAnswer } = req.body;
     if (!email || !password || !secretQuestion || !secretAnswer) {
-      return res.status(400).json({ error: 'Email, mot de passe, question secrète et réponse sont requis.' });
+      return res.status(400).json({ error: 'Tous les champs sont requis' });
     }
 
     const hashedPassword = await hashPassword(password);
 
     const superAdmin = {
-      id: generateId(data.data.users),
+      id: generateId(users),
       email,
       passwordHash: hashedPassword,
       role: 'superAdmin',
@@ -481,16 +467,18 @@ app.post('/api/setup', async (req, res) => {
       licenceKey
     };
 
-    data.data.users.push(superAdmin);
-    saveData(data);
+    // Sauvegarde le nouvel utilisateur
+    const updatedUsers = [...users, superAdmin];
+    await saveData('users', updatedUsers); // <-- ICI aussi
 
     const token = jwt.sign(
-      { userId: superAdmin.id, role: superAdmin.role, licenceKey },
+      { userId: superAdmin.id, email, role: 'superAdmin', licenceKey },
       SECRET_KEY,
       { expiresIn: '24h' }
     );
 
-    res.status(201).json({
+    res.json({ 
+      success: true,
       token,
       user: {
         id: superAdmin.id,
@@ -500,58 +488,60 @@ app.post('/api/setup', async (req, res) => {
     });
 
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    console.error('Setup error:', error);
+    res.status(500).json({ 
+      error: 'Erreur lors de l\'initialisation',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 
 app.post('/api/login', licenceCheckMiddleware, async (req, res) => {
   try {
     const { email, password } = req.body;
+
     if (!email || !password) {
-      return res.status(400).json({ error: 'Email et mot de passe requis' });
+      return res.status(400).json({
+        error: 'Email et mot de passe requis',
+        code: 'MISSING_CREDENTIALS'
+      });
     }
 
-    const data = loadData();
-    const user = data.data.users.find(u => u.email === email);
+    const users = await loadData('users');
+    const user = users.find(u => u.email === email);
+
     if (!user) {
-      return res.status(401).json({ error: 'Identifiants invalides' });
+      return res.status(401).json({ error: 'Identifiants incorrects' });
     }
 
-    const valid = await verifyPassword(password, user.passwordHash); // Changé de user.password à user.passwordHash
-    if (!valid) {
-      return res.status(401).json({ error: 'Identifiants invalides' });
+    const isPasswordValid = bcrypt.compareSync(password, user.passwordHash);
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: 'Identifiants incorrects' });
     }
 
-    // Récupérer la clé licence depuis le middleware licenceCheckMiddleware
-    const licenceKey = req.licence?.key || req.headers['x-licence-key'];
-    if (!licenceKey) {
-      return res.status(400).json({ 
-        error: 'LicenceKey manquante',
-        code: 'MISSING_LICENCE_KEY'
+    // Log pour debug
+    console.log('[LOGIN] Licence attachée :', req.licence?.key);
+
+    if (!req.licence?.key) {
+      return res.status(403).json({
+        error: 'Licence non fournie',
+        code: 'MISSING_LICENCE'
       });
     }
 
-    // Vérifier que l'utilisateur a bien cette licence
-    if (user.licenceKey && user.licenceKey !== licenceKey) {
-      return res.status(403).json({ 
-        error: 'Licence non autorisée pour cet utilisateur',
-        code: 'LICENCE_MISMATCH'
-      });
-    }
-
-    // Générer le token en incluant la licenceKey
     const token = jwt.sign(
-      { 
+      {
         userId: user.id,
         email: user.email,
         role: user.role,
-        licenceKey // Important: inclure la licenceKey dans le token
+        licenceKey: req.licence.key
       },
-      SECRET_KEY, // Utiliser la constante définie plus haut
+      SECRET_KEY,
       { expiresIn: '24h' }
     );
 
     res.json({
+      success: true,
       token,
       user: {
         id: user.id,
@@ -559,33 +549,44 @@ app.post('/api/login', licenceCheckMiddleware, async (req, res) => {
         role: user.role
       }
     });
+
   } catch (error) {
-    console.error('Erreur lors de la connexion:', error);
+    console.error('[LOGIN ERROR]:', error.message);
+    res.status(500).json({ error: 'Erreur serveur', code: 'SERVER_ERROR' });
+  }
+});
+
+
+app.post('/api/reset-password', licenceCheckMiddleware, async (req, res) => {
+  try {
+    const { email, newPassword, secretAnswer } = req.body;
+    
+    // Charge les données SYNCHRONES (comme avant)
+    const data = loadData();
+    
+    // Trouve l'utilisateur
+    const user = data.data.users.find(u => u.email === email);
+    if (!user || user.secretAnswer !== secretAnswer) {
+      return res.status(400).json({ 
+        error: 'Informations de réinitialisation invalides' 
+      });
+    }
+
+    // Met à jour le mot de passe
+    user.passwordHash = await hashPassword(newPassword); // hashPassword reste async
+    
+    // Sauvegarde SYNCHRONE
+    saveData(data);
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Reset password error:', error);
     res.status(500).json({ 
-      error: 'Erreur serveur',
-      ...(process.env.NODE_ENV === 'development' && { details: error.message })
+      error: error.message,
+      code: 'PASSWORD_RESET_FAILED' 
     });
   }
 });
-
-app.post('/api/reset-password', licenceCheckMiddleware, authenticate, async (req, res) => {
-  try {
-    const { email, newPassword, secretAnswer } = req.body;
-    const data = loadData();
-    const user = data.data.users.find(u => u.email === email);
-
-    if (!user || user.secretAnswer !== secretAnswer) {
-      throw new Error('Informations de réinitialisation invalides');
-    }
-
-    user.passwordHash = await hashPassword(newPassword);
-    saveData(data);
-    res.json({ success: true });
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
-
 
 // ===================== ROUTES SÉCURISÉES =====================
 app.post('/api/dashboard/licences/generate', authenticate, (req, res) => {
@@ -621,95 +622,106 @@ app.post('/api/dashboard/licences/generate', authenticate, (req, res) => {
 });
 
 // ===================== STOCK ROUTES =====================
+// GET /api/stock - Récupère le stock filtré par licence
 app.get('/api/stock', authenticate, (req, res) => {
   try {
-    const data = loadData();
     const licenceKey = req.licence.key;
-    const stockWithAlerts = data.data.stock
-      .filter(item => item.licenceKey === licenceKey)
-      .map(item => ({
-        ...item,
-        alerte: item.quantite <= (item.seuilAlerte || 5)
-      }));
-    res.json(stockWithAlerts);
+    const data = loadData('main'); // Assurez-vous que 'main' est le bon fileKey
+    const filteredStock = data.data.stock.filter(item => item.licenceKey === licenceKey);
+    res.json(filteredStock);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('GET /api/stock error:', error);
+    res.status(500).json({
+      error: 'Failed to load stock',
+      details: error.message
+    });
   }
 });
 
 
+// POST /api/stock - Ajoute un nouvel élément
 app.post('/api/stock', authenticate, (req, res) => {
   try {
-    const licenceKey = req.licence.key;
-    const newItem = {
-      ...req.body,
+    // Validation
+    if (!req.body.nom || req.body.quantite === undefined) {
+      return res.status(400).json({ error: 'Name and quantity are required' });
+    }
+
+    const newItem = addStockItem({
+      nom: req.body.nom,
       quantite: parseInt(req.body.quantite) || 0,
-      seuilAlerte: parseInt(req.body.seuilAlerte) || 5,
       prixAchat: parseFloat(req.body.prixAchat) || 0,
+      seuilAlerte: parseInt(req.body.seuilAlerte) || 5,
+      categorie: req.body.categorie || 'autre',
       user: req.user.userId,
-      licenceKey
-    };
-    const createdItem = addStockItem(newItem);
-    res.status(201).json(createdItem);
+      licenceKey: req.licence.key
+    }, req.licence.key);
+
+    res.status(201).json(newItem);
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    console.error('POST /api/stock error:', error);
+    res.status(500).json({
+      error: 'Failed to add item',
+      details: error.message
+    });
   }
 });
 
+
+// PUT /api/stock/:id - Met à jour un élément
 app.put('/api/stock/:id', authenticate, (req, res) => {
   try {
-    const licenceKey = req.licence.key;
-    const data = loadData();
-    const item = data.data.stock.find(item => item.id === parseInt(req.params.id) && item.licenceKey === licenceKey);
-    if (!item) {
-      return res.status(404).json({ error: 'Item not found or not authorized' });
+    const itemId = parseInt(req.params.id);
+    const itemData = {
+      id: itemId,
+      nom: req.body.nom,
+      quantite: parseInt(req.body.quantite),
+      prixAchat: parseFloat(req.body.prixAchat),
+      seuilAlerte: parseInt(req.body.seuilAlerte),
+      categorie: req.body.categorie,
+      user: req.user.userId,
+      licenceKey: req.licence.key
+    };
+
+    const updatedItem = updateStockItem(itemData, req.licence.key);
+
+    if (!updatedItem) {
+      return res.status(404).json({ error: 'Item not found' });
     }
 
-    const updatedItem = {
-      ...req.body,
-      id: parseInt(req.params.id),
-      quantite: parseInt(req.body.quantite) || 0,
-      prixAchat: parseFloat(req.body.prixAchat) || 0,
-      user: req.user.userId,
-      licenceKey
-    };
-    updateStockItem(updatedItem);
-    res.json({ success: true });
+    res.json(updatedItem);
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    console.error('PUT /api/stock error:', error);
+    res.status(500).json({
+      error: 'Failed to update item',
+      details: error.message
+    });
   }
 });
 
 app.delete('/api/stock/:id', authenticate, (req, res) => {
   try {
-    const licenceKey = req.licence.key;
-    const data = loadData();
-    const item = data.data.stock.find(item => item.id === parseInt(req.params.id) && item.licenceKey === licenceKey);
-    if (!item) {
-      return res.status(404).json({ error: 'Item not found or not authorized' });
-    }
-
-    deleteStockItem(parseInt(req.params.id));
+    const itemId = parseInt(req.params.id);
+    deleteStockItem(itemId, req.user.userId, req.licence.key);
     res.json({ success: true });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 });
 
+
+
 // ===================== COMMANDES ROUTES =====================
+// GET toutes les commandes
 app.get('/api/commandes', authenticate, (req, res) => {
   try {
     const licenceKey = req.licence.key;
-    const data = loadData();
+    const data = loadData('main');
     const commandes = data.data.commandes
-      .filter(commande => commande.licenceKey === licenceKey)
+      .filter(c => c.licenceKey === licenceKey)
       .map(commande => ({
         ...commande,
-        produits: commande.produits && Array.isArray(commande.produits)
-          ? commande.produits.map(produit => ({
-              ...produit,
-            }))
-          : [],
+        produits: Array.isArray(commande.produits) ? commande.produits : []
       }));
     res.json(commandes);
   } catch (error) {
@@ -717,30 +729,34 @@ app.get('/api/commandes', authenticate, (req, res) => {
   }
 });
 
+// GET une commande par ID
 app.get('/api/commandes/:id', authenticate, (req, res) => {
   try {
     const licenceKey = req.licence.key;
-    const data = loadData();
-    const commande = data.data.commandes.find(c => c.id === parseInt(req.params.id) && c.licenceKey === licenceKey);
-    if (!commande) return res.status(404).json({ error: 'Commande non trouvée' });
+    const commandeId = parseInt(req.params.id, 10);
+    const data = loadData('main');
+    const commande = data.data.commandes.find(
+      c => c.id === commandeId && c.licenceKey === licenceKey
+    );
 
-    const commandeWithCFA = {
+    if (!commande) {
+      return res.status(404).json({ error: 'Commande non trouvée' });
+    }
+
+    res.json({
       ...commande,
-      produits: commande.produits.map(produit => ({
-        ...produit,
-      }))
-    };
-
-    res.json(commandeWithCFA);
+      produits: Array.isArray(commande.produits) ? commande.produits : []
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
+// POST nouvelle commande
 app.post('/api/commandes/new', authenticate, (req, res) => {
   try {
     const licenceKey = req.licence.key;
-    const requiredFields = ['fournisseur', 'nomProduit', 'prix'];
+    const requiredFields = ['fournisseur', 'nomProduit', 'prix', 'fournisseurEmail'];
     const missingFields = requiredFields.filter(field => !req.body[field]);
 
     if (missingFields.length > 0) {
@@ -766,8 +782,8 @@ app.post('/api/commandes/new', authenticate, (req, res) => {
       productName: req.body.nomProduit,
       produits: [{
         nom: req.body.nomProduit,
-        quantite: quantite,
-        prixUnitaire: prixUnitaire
+        quantite,
+        prixUnitaire
       }],
       montant: prixUnitaire * quantite,
       statut: "en_attente",
@@ -777,57 +793,42 @@ app.post('/api/commandes/new', authenticate, (req, res) => {
       licenceKey
     };
 
-    const createdCommande = addCommande(newCommande);
-    res.status(201).json(createdCommande);
+    const data = loadData('main');
+    data.data.commandes.push(newCommande);
+    saveData('main', data);
+
+    res.status(201).json(newCommande);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 });
 
+// POST valider commande
 app.post('/api/commandes/:id/valider', authenticate, (req, res) => {
   try {
-    const licenceKey = req.licence.key;
-    const data = loadData();
-    const commandeIndex = data.data.commandes.findIndex(c => c.id === parseInt(req.params.id) && c.licenceKey === licenceKey);
+    const commandeId = parseInt(req.params.id);
+    const commande = validerCommande(commandeId, req.user.userId, req.licence.key);
 
-    if (commandeIndex === -1) {
+    if (!commande) {
       return res.status(404).json({ error: "Commande non trouvée" });
     }
 
-    const commande = data.data.commandes[commandeIndex];
-    commande.statut = "validée";
-    commande.dateValidation = new Date().toISOString();
-
-    commande.produits.forEach(produit => {
-      const stockItem = data.data.stock.find(item => item.nom === produit.nom && item.licenceKey === licenceKey);
-      if (stockItem) {
-        stockItem.quantite += produit.quantite;
-      }
-    });
-
-    saveData(data);
     res.json({
       success: true,
-      commande: commande,
-      stock: data.data.stock.find(item => item.nom === commande.productName && item.licenceKey === licenceKey)
+      commande,
     });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 });
 
+
+// POST annuler commande
 app.post('/api/commandes/:id/annuler', authenticate, (req, res) => {
   try {
-    const licenceKey = req.licence.key;
     const commandeId = parseInt(req.params.id);
-    const data = loadData();
-    const commandeIndex = data.data.commandes.findIndex(c => c.id === commandeId && c.licenceKey === licenceKey);
+    annulerCommande(commandeId, req.user.userId, req.licence.key);
 
-    if (commandeIndex === -1) {
-      return res.status(404).json({ error: "Commande non trouvée" });
-    }
-
-    annulerCommande(commandeId);
     res.json({ success: true, message: 'Commande annulée' });
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -858,103 +859,41 @@ app.post('/api/ventes', authenticate, (req, res) => {
     }
 
     const newVente = {
-      id: Date.now(),
       recetteId: parseInt(req.body.recetteId),
       quantite: parseInt(req.body.quantite),
-      date: new Date().toISOString(),
-      statut: 'en_attente',
       client: req.body.client || 'anonyme',
       user: req.user.userId,
       licenceKey
     };
 
-    const createdVente = addVente(newVente);
+    const createdVente = addVente(newVente, licenceKey);
     res.status(201).json(createdVente);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 });
 
+
 app.post('/api/ventes/:id/valider', authenticate, (req, res) => {
   try {
-    const licenceKey = req.licence.key;
-    const data = loadData();
-    const vente = data.data.ventes.find(v => v.id === parseInt(req.params.id) && v.licenceKey === licenceKey);
+    const venteId = parseInt(req.params.id);
+    const { vente, benefice } = validerVente(venteId, req.user.userId, req.licence.key);
 
     if (!vente) {
       return res.status(404).json({ error: "Vente non trouvée" });
     }
 
-    const recette = data.data.recettes.find(r => r.id === vente.recetteId && r.licenceKey === licenceKey);
-    if (!recette) {
-      return res.status(400).json({ error: "Recette introuvable" });
-    }
-
-    let coutTotal = 0;
-    let beneficeTotal = 0;
-
-    recette.ingredients.forEach(ingredient => {
-      const stockItem = data.data.stock.find(item => item.id === ingredient.id && item.licenceKey === licenceKey);
-      if (stockItem) {
-        coutTotal += stockItem.prixAchat * ingredient.quantite;
-      }
-    });
-
-    beneficeTotal = (recette.prix * vente.quantite) - coutTotal;
-
-    recette.ingredients.forEach(ingredient => {
-      const stockItem = data.data.stock.find(item => item.id === ingredient.id && item.licenceKey === licenceKey);
-      if (stockItem) {
-        stockItem.quantite -= ingredient.quantite * vente.quantite;
-
-        data.data.mouvements.push({
-          id: data.data.mouvements.length > 0 ? Math.max(...data.data.mouvements.map(m => m.id)) + 1 : 1,
-          productId: ingredient.id,
-          nom: stockItem.nom,
-          type: 'vente',
-          quantite: -(ingredient.quantite * vente.quantite),
-          date: new Date().toISOString(),
-          details: {
-            venteId: vente.id,
-            recetteId: recette.id,
-            prixAchat: stockItem.prixAchat
-          },
-          licenceKey
-        });
-      }
-    });
-
-    vente.statut = 'validée';
-    vente.dateValidation = new Date().toISOString();
-    vente.coutTotal = coutTotal;
-    vente.benefice = beneficeTotal;
-
-    data.data.rapports.ventes.push({
-      id: generateId(data.data.rapports.ventes),
-      venteId: vente.id,
-      montant: recette.prix * vente.quantite,
-      date: new Date().toISOString(),
-      licenceKey
-    });
-
-    data.data.rapports.benefices.push({
-      id: generateId(data.data.rapports.benefices),
-      venteId: vente.id,
-      montant: beneficeTotal,
-      date: new Date().toISOString(),
-      licenceKey
-    });
-
-    saveData(data);
     res.json({
       success: true,
-      vente: vente,
-      benefice: beneficeTotal
+      vente,
+      benefice
     });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 });
+
+
 
 // ===================== RECETTES ROUTES =====================
 app.get('/api/recettes', authenticate, (req, res) => {
@@ -1082,7 +1021,7 @@ app.post('/api/recettes', authenticate, upload.single('image'), (req, res) => {
       try {
         recipeData = JSON.parse(req.body.data);
       } catch (e) {
-        return res.status(400).json({ error: "Format JSON invalide" });
+        return res.status(400).json({ error: "Format JSON invalide dans req.body.data" });
       }
     } else {
       recipeData = req.body;
@@ -1092,7 +1031,7 @@ app.post('/api/recettes', authenticate, upload.single('image'), (req, res) => {
       try {
         recipeData.ingredients = JSON.parse(recipeData.ingredients);
       } catch (e) {
-        return res.status(400).json({ error: "Format JSON invalide pour les ingrédients" });
+        return res.status(400).json({ error: "Format JSON invalide dans ingredients" });
       }
     }
 
@@ -1106,7 +1045,7 @@ app.post('/api/recettes', authenticate, upload.single('image'), (req, res) => {
       id: generateId(),
       prix: parseFloat(recipeData.prix) || 0,
       ingredients: sanitizeIngredients(recipeData.ingredients),
-      image: req.file ? `/uploads/${req.file.filename}` : null,
+      image: req.file ? `/uploads/${req.file.filename}` : '',
       user: req.user.userId,
       licenceKey
     };
@@ -1115,15 +1054,15 @@ app.post('/api/recettes', authenticate, upload.single('image'), (req, res) => {
       throw new Error("Au moins un ingrédient valide est requis");
     }
 
-    const invalidIngredient = newRecipe.ingredients.find(ing =>
-      !ing.nom || isNaN(ing.quantite) || ing.quantite <= 0
+    const invalidIngredient = newRecipe.ingredients.find(
+      ing => !ing.nom || isNaN(ing.quantite) || ing.quantite <= 0
     );
 
     if (invalidIngredient) {
       throw new Error(`Ingrédient invalide: ${invalidIngredient.nom}`);
     }
 
-    const createdRecipe = addRecette(newRecipe);
+    const createdRecipe = addRecette(newRecipe, licenceKey);
 
     res.status(201).json({
       success: true,
@@ -1165,26 +1104,110 @@ app.delete('/api/recettes/:id', authenticate, async (req, res) => {
 });
 
 // ===================== MOUVEMENTS ROUTES =====================
-app.get('/api/mouvements', authenticate, (req, res) => {
+// ===================== MOUVEMENTS ROUTES ============>
+app.post('/api/mouvements', authenticate, (req, res) => {
   try {
     const licenceKey = req.licence.key;
-    const data = loadData();
-    const mouvements = data.data.mouvements
-      .filter(mouvement => mouvement.licenceKey === licenceKey)
-      .map(mouvement => ({
-        ...mouvement,
-        details: mouvement.details && mouvement.details.stockAfter
-          ? { ...mouvement.details, stockAfter: mouvement.details.stockAfter }
-          : mouvement.details
-      }));
-    res.json(mouvements || []);
+    const userId = req.user.userId;
+    const { nom, produitId, type, quantite, details } = req.body;
+
+    // Validation
+    if (!type || quantite === undefined || (!nom && !produitId)) {
+      return res.status(400).json({
+        error: "Champs requis manquants",
+        required: {
+          type: ["réapprovisionnement", "diminution", "suppression", "modification"],
+          quantite: "number",
+          nom_or_produitId: "string|number"
+        }
+      });
+    }
+
+    const data = loadData('main'); // Chargement unique du fichier principal
+
+    // Recherche du produit
+    const produit = data.data.stock.find(item => 
+      item.licenceKey === licenceKey && 
+      (produitId ? item.id === Number(produitId) : item.nom.toLowerCase() === nom.toLowerCase())
+    );
+
+    if (!produit) {
+      return res.status(404).json({
+        error: "Produit non trouvé",
+        produitsDisponibles: data.data.stock
+          .filter(p => p.licenceKey === licenceKey)
+          .map(p => ({ id: p.id, nom: p.nom }))
+      });
+    }
+
+    // Calcul nouvelle quantité
+    const stockBefore = produit.quantite;
+    let stockAfter = stockBefore;
+
+    switch (type) {
+      case 'réapprovisionnement':
+        stockAfter = stockBefore + Number(quantite);
+        break;
+      case 'diminution':
+        stockAfter = Math.max(0, stockBefore - Number(quantite));
+        break;
+      case 'suppression':
+        stockAfter = 0;
+        break;
+      case 'modification':
+        stockAfter = Number(quantite);
+        break;
+      default:
+        return res.status(400).json({ error: "Type de mouvement invalide" });
+    }
+
+    // Mise à jour du stock
+    produit.quantite = stockAfter;
+
+    // Création du mouvement
+    const newMouvement = {
+      id: generateId(data.data.mouvements),
+      produitId: produit.id,
+      nom: produit.nom,
+      type,
+      quantite: type === 'réapprovisionnement' ? Number(quantite) : -Number(quantite),
+      date: new Date().toISOString(),
+      details: {
+        ...details,
+        user: userId,
+        stockBefore,
+        stockAfter
+      },
+      licenceKey
+    };
+
+    // Ajout aux mouvements
+    data.data.mouvements.push(newMouvement);
+
+    // Sauvegarde unique
+    saveData('main', data);
+
+    res.status(201).json({
+      success: true,
+      mouvement: newMouvement,
+      stock: {
+        id: produit.id,
+        nom: produit.nom,
+        nouvelleQuantite: stockAfter
+      }
+    });
+
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("Erreur mouvements:", error);
+    res.status(500).json({
+      error: "Erreur de traitement",
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 
 // Ajouter dans votre backend
-app.post('/api/recettes-avec-stock', authenticate, upload.single('image'), (req, res) => {
+app.post('/api/recettes-avec-stock', authenticate, upload.single('image'), async (req, res) => {
   try {
     const licenceKey = req.licence.key;
     let recipeData;
@@ -1215,10 +1238,10 @@ app.post('/api/recettes-avec-stock', authenticate, upload.single('image'), (req,
       licenceKey
     };
 
-    const createdRecipe = addRecetteWithStockUpdate(newRecipe);
+    const createdRecipe = addRecetteWithStockUpdate(newRecipe, licenceKey);
     res.status(201).json({
       ...createdRecipe,
-      image: createdRecipe.image ? `http://localhost:3001${createdRecipe.image}` : null
+      image: createdRecipe.image ? `http://localhost:3000${createdRecipe.image}` : null
     });
   } catch (error) {
     if (req.file) fs.unlink(req.file.path, () => {});
@@ -1226,51 +1249,52 @@ app.post('/api/recettes-avec-stock', authenticate, upload.single('image'), (req,
   }
 });
 
+
 // ===================== ALERTES ROUTES =====================
 app.get('/api/alertes', authenticate, (req, res) => {
   try {
     const licenceKey = req.licence.key;
-    const data = loadData();
-    const alerts = data.data.stock
-      .filter(item => item.licenceKey === licenceKey)
-      .filter(item => item.quantite <= (item.seuilAlerte || 5))
-      .map(item => ({
-        id: item.id,
-        nom: item.nom,
-        quantite: item.quantite,
-        seuilAlerte: item.seuilAlerte
-      }));
+    const alerts = getStockAlerts(licenceKey);
     res.json(alerts || []);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// ===================== RAPPORTS ROUTES =====================
+// ===================== RAPPORTS ROUTES ==============>
 app.get('/api/rapports', authenticate, (req, res) => {
   try {
     const licenceKey = req.licence.key;
-    const data = loadData();
+    const data = loadData('main'); // Spécifier le fichier 'main'
+    
+    // Initialiser les rapports s'ils n'existent pas
+    if (!data.data.rapports) {
+      data.data.rapports = {
+        ventes: [],
+        depenses: [],
+        benefices: []
+      };
+    }
+
     const rapports = {
-      ventes: data.data.rapports.ventes
+      ventes: (data.data.rapports.ventes || [])
         .filter(vente => vente.licenceKey === licenceKey)
-        .map(v => ({
-          ...v,
-        })),
-      depenses: data.data.rapports.depenses
+        .map(v => ({ ...v })),
+      depenses: (data.data.rapports.depenses || [])
         .filter(depense => depense.licenceKey === licenceKey)
-        .map(d => ({
-          ...d,
-        })),
-      benefices: data.data.rapports.benefices
+        .map(d => ({ ...d })),
+      benefices: (data.data.rapports.benefices || [])
         .filter(benefice => benefice.licenceKey === licenceKey)
-        .map(b => ({
-          ...b,
-        }))
+        .map(b => ({ ...b }))
     };
+
     res.json(rapports);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Erreur dans /api/rapports:', error);
+    res.status(500).json({ 
+      error: 'Erreur lors de la récupération des rapports',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 
@@ -1279,120 +1303,167 @@ app.get('/api/rapports', authenticate, (req, res) => {
 app.get('/api/staff', authenticate, (req, res) => {
   try {
     const licenceKey = req.licence.key;
-    const data = loadData();
-    const currentUser = data.data.users.find(u => u.id === req.user.userId && u.licenceKey === licenceKey);
+    const mainData = loadData('main');
+    const staffMembers = (mainData.data.staff || [])
+      .filter(s => s.licenceKey === licenceKey)
+      .map(member => ({
+        id: member.id,
+        email: member.email,
+        role: member.role,
+        createdAt: member.createdAt
+      }));
 
-    if (!currentUser || currentUser.role !== 'superAdmin') {
-      return res.status(403).json({ error: 'Action non autorisée' });
-    }
-
-    const staffMembers = data.data.users
-      .filter(user => user.licenceKey === licenceKey)
-      .filter(user => user.role !== 'superAdmin');
-    res.json(staffMembers);
+    res.json({
+      success: true,
+      count: staffMembers.length,
+      staff: staffMembers
+    });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+      error: 'Erreur de récupération du staff',
+      details: error.message
+    });
   }
 });
 
+
 app.post('/api/staff', authenticate, async (req, res) => {
   try {
+    const { email, password, role, adminPassword } = req.body;
     const licenceKey = req.licence.key;
-    const data = loadData();
-    const { email, password } = req.body;
+    const creatorId = req.user.userId;
 
-    const currentUser = data.data.users.find(u => u.id === req.user.userId && u.licenceKey === licenceKey);
-    if (!currentUser || currentUser.role !== 'superAdmin') {
-      return res.status(403).json({ error: 'Action non autorisée' });
+    // 1. Trouver le superAdmin connecté
+    const usersData = loadData('users');
+    const creator = (Array.isArray(usersData) ? usersData : usersData.users || []).find(u => u.id === creatorId);
+
+    console.log('Créateur trouvé :', creator);
+
+    if (!creator || creator.role !== 'superAdmin') {
+      return res.status(403).json({
+        error: 'Action réservée aux super-administrateurs',
+        code: 'ADMIN_ACCESS_REQUIRED'
+      });
     }
 
-    if (data.data.users.some(u => u.email === email && u.licenceKey === licenceKey)) {
-      return res.status(400).json({ error: 'Cet email est déjà utilisé' });
+    // 2. Vérifier le mot de passe admin
+    const isValid = await bcrypt.compare(adminPassword, creator.passwordHash);
+    if (!isValid) {
+      return res.status(401).json({ error: 'Mot de passe administrateur incorrect' });
     }
 
-    const newAdmin = {
-      id: generateId(data.data.users),
+    // 3. Vérifier l'unicité de l'email
+    const mainData = loadData('main');
+    const existingStaff = (mainData.data?.staff || []).some(s => s.email === email);
+    const existingUser = (Array.isArray(usersData) ? usersData : usersData.users || []).some(u => u.email === email);
+
+    if (existingStaff || existingUser) {
+      return res.status(400).json({
+        error: 'Email déjà utilisé',
+        code: 'EMAIL_EXISTS'
+      });
+    }
+
+    // 4. Créer le staff
+    const newStaff = {
+      id: generateId(),
       email,
       passwordHash: await hashPassword(password),
-      role: 'admin',
+      role: role || 'staff',
+      licenceKey,
       createdAt: new Date().toISOString(),
-      createdBy: req.user.userId,
-      licenceKey
+      createdBy: creatorId
     };
 
-    data.data.users.push(newAdmin);
-    saveData(data);
+    // 5. Sauvegarder
+    mainData.data.staff = [...(mainData.data.staff || []), newStaff];
+    saveData('main', mainData);
 
     res.status(201).json({
-      id: newAdmin.id,
-      email: newAdmin.email,
-      role: newAdmin.role
+      success: true,
+      staff: {
+        id: newStaff.id,
+        email: newStaff.email,
+        role: newStaff.role
+      }
     });
+
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    console.error('[STAFF CREATION ERROR]', error);
+    res.status(500).json({
+      error: 'Erreur lors de la création du staff',
+      details: error.message
+    });
   }
 });
 
 app.delete('/api/staff/:id', authenticate, async (req, res) => {
   try {
-    const licenceKey = req.licence.key;
-    const data = loadData();
-    const userId = parseInt(req.params.id);
-    const currentUser = data.data.users.find(u => u.id === req.user.userId && u.licenceKey === licenceKey);
+    const licenceKey = req.headers['x-licence-key'];
+    const staffId = parseInt(req.params.id);
+    const userId = req.user.userId;
+    const { adminPassword } = req.body; // Récupérer le mot de passe de l'administrateur depuis le corps de la requête
+
+    const usersData = loadData('users');
+    const users = Array.isArray(usersData) ? usersData : usersData.users || [];
+
+    const currentUser = users.find(u => u.id === userId);
+
+    console.log('Utilisateur actuel (pour suppression) :', currentUser);
 
     if (!currentUser || currentUser.role !== 'superAdmin') {
-      return res.status(403).json({ error: 'Action non autorisée' });
+      return res.status(403).json({
+        error: 'Action non autorisée : superAdmin requis',
+        code: 'ADMIN_ACCESS_REQUIRED'
+      });
     }
 
-    const userToDelete = data.data.users.find(u => u.id === userId && u.licenceKey === licenceKey);
-    if (!userToDelete) {
-      return res.status(404).json({ error: 'Utilisateur non trouvé' });
+    // Vérifier le mot de passe de l'administrateur
+    const isAdminPasswordValid = await bcrypt.compare(adminPassword, currentUser.passwordHash);
+    if (!isAdminPasswordValid) {
+      return res.status(403).json({
+        error: 'Mot de passe administrateur incorrect',
+        code: 'INVALID_ADMIN_PASSWORD'
+      });
     }
 
-    if (userToDelete.role === 'superAdmin') {
-      return res.status(403).json({ error: 'Impossible de supprimer un superAdmin' });
+    // Supprimer le staff dans le fichier main
+    const mainData = loadData('main');
+    const originalStaffList = mainData.data?.staff || [];
+    const updatedStaffList = originalStaffList.filter(s => s.id !== staffId || s.licenceKey !== licenceKey);
+
+    if (originalStaffList.length === updatedStaffList.length) {
+      return res.status(404).json({
+        error: "Aucun membre du staff correspondant trouvé pour suppression"
+      });
     }
 
-    data.data.users = data.data.users.filter(u => u.id !== userId && u.licenceKey === licenceKey);
-    saveData(data);
+    mainData.data.staff = updatedStaffList;
+    saveData('main', mainData);
+
     res.json({ success: true });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    console.error('[DELETE STAFF ERROR]', error);
+    res.status(500).json({
+      error: 'Erreur lors de la suppression du staff',
+      details: error.message
+    });
   }
 });
 
-app.post('/api/verify-password', licenceCheckMiddleware, authenticate, async (req, res) => {
+// Version corrigée (notez 'app.post' au lieu de 'pp.post')
+app.post('/api/verify-password', async (req, res) => {
   try {
-    const { password } = req.body;
-    const userId = req.user.userId;
-    const licenceKey = req.licence.key;
-
-    const data = loadData();
-    const user = data.data.users.find(u => u.id === userId && u.licenceKey === licenceKey);
-    if (!user) {
-      return res.status(404).json({ error: 'Utilisateur non trouvé' });
+    const { password, hash } = req.body;
+    if (!password || !hash) {
+      return res.status(400).json({ error: 'Mot de passe et hash requis' });
     }
 
-    if (user.role !== 'superAdmin') {
-      return res.status(403).json({ error: 'Action réservée aux superAdmin' });
-    }
-
-    const isValid = await verifyPassword(password, user.passwordHash);
-
-    res.json({
-      valid: isValid,
-      user: {
-        id: user.id,
-        email: user.email,
-        role: user.role
-      }
-    });
-
+    const valid = await verifyPassword(password, hash);
+    res.json({ valid });
   } catch (error) {
-    console.error('Erreur de vérification:', error);
-    res.status(400).json({
-      error: error.message || 'Erreur lors de la vérification du mot de passe',
-    });
+    console.error('Verify password error:', error);
+    res.status(500).json({ error: 'Erreur de vérification du mot de passe' });
   }
 });
 
@@ -1401,7 +1472,7 @@ app.post('/api/verify-password', licenceCheckMiddleware, authenticate, async (re
 app.get('/api/history', authenticate, (req, res) => {
   try {
     const licenceKey = req.licence.key;
-    const data = loadData();
+    const data = loadData('main'); // Assurez-vous que 'main' est le bon fileKey
 
     const actionMap = {
       'ADD_STOCK_ITEM': 'STOCK_ADD',
@@ -1453,7 +1524,7 @@ app.get('/api/history', authenticate, (req, res) => {
         const baseEntry = {
           id: log.id,
           timestamp: log.timestamp,
-          date: new Date(log.timestamp).toLocaleString(),
+          date: new Date(log.timestamp).toLocaleString('fr-FR'),
           actionType: actionMap[log.action] || log.action,
           user: usersMap[log.user] || log.user || 'system'
         };
@@ -1463,7 +1534,7 @@ app.get('/api/history', authenticate, (req, res) => {
             return {
               ...baseEntry,
               details: {
-                productId: data.data.stock.find(p => p.nom === log.details.nom && p.licenceKey === licenceKey)?.id,
+                productId: data.data.stock.find(p => p.id === log.details.productId)?.id,
                 nom: log.details.nom,
                 quantite: log.details.quantite,
                 prixAchat: log.details.prixAchat,
@@ -1476,7 +1547,7 @@ app.get('/api/history', authenticate, (req, res) => {
             return {
               ...baseEntry,
               details: {
-                productId: data.data.stock.find(p => p.nom === log.details.nom && p.licenceKey === licenceKey)?.id,
+                productId: data.data.stock.find(p => p.id === log.details.productId)?.id,
                 nom: log.details.nom,
                 ancienneQuantite: log.details.ancienneQuantite,
                 nouvelleQuantite: log.details.nouvelleQuantite,
@@ -1495,7 +1566,7 @@ app.get('/api/history', authenticate, (req, res) => {
             };
 
           case 'ADD_COMMANDE':
-            const addedCmd = data.data.commandes.find(c => c.id === log.details.commandeId && c.licenceKey === licenceKey);
+            const addedCmd = data.data.commandes.find(c => c.id === log.details.commandeId);
             return {
               ...baseEntry,
               details: {
@@ -1510,7 +1581,7 @@ app.get('/api/history', authenticate, (req, res) => {
             };
 
           case 'VALIDER_COMMANDE':
-            const validatedCmd = data.data.commandes.find(c => c.id === log.details.commandeId && c.licenceKey === licenceKey);
+            const validatedCmd = data.data.commandes.find(c => c.id === log.details.commandeId);
             return {
               ...baseEntry,
               details: {
@@ -1521,12 +1592,12 @@ app.get('/api/history', authenticate, (req, res) => {
                   quantite: p.quantite,
                   prixUnitaire: p.prixUnitaire,
                   montant: p.quantite * p.prixUnitaire,
-                  stockAfter: data.data.stock.find(s => s.nom === p.nom && s.licenceKey === licenceKey)?.quantite
+                  stockAfter: data.data.stock.find(s => s.id === p.id)?.quantite
                 })) || log.details.produits,
                 montantTotal: validatedCmd?.montant || log.details.montantTotal,
                 dateValidation: validatedCmd?.dateValidation || log.timestamp,
                 mouvementsStock: data.data.mouvements
-                  .filter(m => m.details?.commandeId === log.details.commandeId && m.licenceKey === licenceKey)
+                  .filter(m => m.details?.commandeId === log.details.commandeId)
                   .map(m => ({
                     productId: m.productId,
                     nom: m.nom,
@@ -1547,7 +1618,7 @@ app.get('/api/history', authenticate, (req, res) => {
             };
 
           case 'ADD_RECETTE':
-            const addedRecipe = data.data.recettes.find(r => r.id === log.details.recetteId && r.licenceKey === licenceKey);
+            const addedRecipe = data.data.recettes.find(r => r.id === log.details.recetteId);
             return {
               ...baseEntry,
               details: {
@@ -1564,7 +1635,7 @@ app.get('/api/history', authenticate, (req, res) => {
             };
 
           case 'ADD_RECETTE_WITH_STOCK_UPDATE':
-            const recipeWithStock = data.data.recettes.find(r => r.id === log.details.recetteId && r.licenceKey === licenceKey);
+            const recipeWithStock = data.data.recettes.find(r => r.id === log.details.recetteId);
             return {
               ...baseEntry,
               details: {
@@ -1574,11 +1645,11 @@ app.get('/api/history', authenticate, (req, res) => {
                   id: ing.id,
                   nom: productsMap[ing.id] || ing.nom,
                   quantite: ing.quantite,
-                  stockAvant: data.data.stock.find(s => s.id === ing.id && s.licenceKey === licenceKey)?.quantite,
-                  stockApres: data.data.stock.find(s => s.id === ing.id && s.licenceKey === licenceKey)?.quantite
+                  stockAvant: data.data.stock.find(s => s.id === ing.id)?.quantite,
+                  stockApres: data.data.stock.find(s => s.id === ing.id)?.quantite
                 })) || log.details.ingredients,
                 mouvementsAssocies: data.data.mouvements
-                  .filter(m => m.details?.recetteId === log.details.recetteId && m.licenceKey === licenceKey)
+                  .filter(m => m.details?.recetteId === log.details.recetteId)
                   .map(m => ({
                     productId: m.productId,
                     nom: m.nom,
@@ -1598,7 +1669,7 @@ app.get('/api/history', authenticate, (req, res) => {
             };
 
           case 'ADD_VENTE':
-            const addedSale = data.data.ventes.find(v => v.id === log.details.venteId && v.licenceKey === licenceKey);
+            const addedSale = data.data.ventes.find(v => v.id === log.details.venteId);
             return {
               ...baseEntry,
               details: {
@@ -1613,7 +1684,7 @@ app.get('/api/history', authenticate, (req, res) => {
             };
 
           case 'VALIDER_VENTE':
-            const validatedSale = data.data.ventes.find(v => v.id === log.details.venteId && v.licenceKey === licenceKey);
+            const validatedSale = data.data.ventes.find(v => v.id === log.details.venteId);
             return {
               ...baseEntry,
               details: {
@@ -1628,10 +1699,10 @@ app.get('/api/history', authenticate, (req, res) => {
                   id: ing.id,
                   nom: productsMap[ing.id],
                   quantite: ing.quantite * validatedSale?.quantite,
-                  prixUnitaire: data.data.stock.find(s => s.id === ing.id && s.licenceKey === licenceKey)?.prixAchat
+                  prixUnitaire: data.data.stock.find(s => s.id === ing.id)?.prixAchat
                 })) || [],
                 mouvementsStock: data.data.mouvements
-                  .filter(m => m.details?.venteId === log.details.venteId && m.licenceKey === licenceKey)
+                  .filter(m => m.details?.venteId === log.details.venteId)
                   .map(m => ({
                     productId: m.productId,
                     nom: m.nom,
@@ -1672,6 +1743,7 @@ app.get('/api/history', authenticate, (req, res) => {
     });
   }
 });
+
 
 app.get('/api/debug', authenticate, (req, res) => {
   const data = loadData();
