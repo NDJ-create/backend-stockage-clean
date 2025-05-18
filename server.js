@@ -900,28 +900,28 @@ app.post('/api/ventes/:id/valider', authenticate, (req, res) => {
 app.get('/api/recettes', authenticate, (req, res) => {
   try {
     const licenceKey = req.licence.key;
-    const data = loadData();
-    const recettesWithFullUrl = data.data.recettes
+    const data = loadData('main'); // Assurez-vous de spécifier le fichier à charger
+    if (!data || !data.data || !data.data.recettes) {
+      throw new Error('Invalid data structure returned from loadData');
+    }
+    const recettes = data.data.recettes
       .filter(recette => recette.licenceKey === licenceKey)
       .map(recette => ({
         ...recette,
-        ingredients: (Array.isArray(recette.ingredients)
-          ? recette.ingredients.map(ing => ({
-              id: ing.id,
-              nom: ing.nom,
-              quantite: ing.quantite,
-              unite: ing.unite || 'unité(s)'
-            }))
-          : []),
+        ingredients: Array.isArray(recette.ingredients)
+          ? recette.ingredients
+          : [],
         image: recette.image
-          ? `http://localhost:3001${recette.image}`
+          ? `${req.protocol}://${req.get('host')}${recette.image}`
           : null
       }));
-    res.json(recettesWithFullUrl || []);
+    res.json(recettes || []); // Toujours retourner un tableau
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error(error);
+    res.status(500).json([]); // Retourner un tableau vide en cas d'erreur
   }
 });
+
 
 app.put('/api/recettes/:id/update', authenticate, upload.single('image'), (req, res) => {
   try {
