@@ -1104,104 +1104,23 @@ app.delete('/api/recettes/:id', authenticate, async (req, res) => {
   }
 });
 
-// ===================== MOUVEMENTS ROUTES =====================
 // ===================== MOUVEMENTS ROUTES ============>
-app.post('/api/mouvements', authenticate, (req, res) => {
+app.get('/api/mouvements', authenticate, (req, res) => {
   try {
     const licenceKey = req.licence.key;
-    const userId = req.user.userId;
-    const { nom, produitId, type, quantite, details } = req.body;
-
-    // Validation
-    if (!type || quantite === undefined || (!nom && !produitId)) {
-      return res.status(400).json({
-        error: "Champs requis manquants",
-        required: {
-          type: ["réapprovisionnement", "diminution", "suppression", "modification"],
-          quantite: "number",
-          nom_or_produitId: "string|number"
-        }
-      });
-    }
-
-    const data = loadData('main'); // Chargement unique du fichier principal
-
-    // Recherche du produit
-    const produit = data.data.stock.find(item => 
-      item.licenceKey === licenceKey && 
-      (produitId ? item.id === Number(produitId) : item.nom.toLowerCase() === nom.toLowerCase())
-    );
-
-    if (!produit) {
-      return res.status(404).json({
-        error: "Produit non trouvé",
-        produitsDisponibles: data.data.stock
-          .filter(p => p.licenceKey === licenceKey)
-          .map(p => ({ id: p.id, nom: p.nom }))
-      });
-    }
-
-    // Calcul nouvelle quantité
-    const stockBefore = produit.quantite;
-    let stockAfter = stockBefore;
-
-    switch (type) {
-      case 'réapprovisionnement':
-        stockAfter = stockBefore + Number(quantite);
-        break;
-      case 'diminution':
-        stockAfter = Math.max(0, stockBefore - Number(quantite));
-        break;
-      case 'suppression':
-        stockAfter = 0;
-        break;
-      case 'modification':
-        stockAfter = Number(quantite);
-        break;
-      default:
-        return res.status(400).json({ error: "Type de mouvement invalide" });
-    }
-
-    // Mise à jour du stock
-    produit.quantite = stockAfter;
-
-    // Création du mouvement
-    const newMouvement = {
-      id: generateId(data.data.mouvements),
-      produitId: produit.id,
-      nom: produit.nom,
-      type,
-      quantite: type === 'réapprovisionnement' ? Number(quantite) : -Number(quantite),
-      date: new Date().toISOString(),
-      details: {
-        ...details,
-        user: userId,
-        stockBefore,
-        stockAfter
-      },
-      licenceKey
-    };
-
-    // Ajout aux mouvements
-    data.data.mouvements.push(newMouvement);
-
-    // Sauvegarde unique
-    saveData('main', data);
-
-    res.status(201).json({
-      success: true,
-      mouvement: newMouvement,
-      stock: {
-        id: produit.id,
-        nom: produit.nom,
-        nouvelleQuantite: stockAfter
-      }
-    });
-
+    const data = loadData('main');
+    
+    // Tri par date décroissante + filtre licence
+    const filteredMouvements = data.data.mouvements
+      .filter(mvt => mvt.licenceKey === licenceKey)
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    res.json(filteredMouvements);
+    
   } catch (error) {
-    console.error("Erreur mouvements:", error);
-    res.status(500).json({
-      error: "Erreur de traitement",
+    console.error('GET /api/mouvements error:', error);
+    res.status(500).json({ 
+      error: 'Failed to load movements',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
