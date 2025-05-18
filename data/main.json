@@ -18,6 +18,17 @@
         "dateAjout": "2025-05-18T00:59:15.348Z",
         "addedBy": 1,
         "licenceKey": "LIC-1-B21585D3"
+      },
+      {
+        "id": 2,
+        "nom": "Ingrédient en Alerte",
+        "quantite": 1,
+        "prixAchat": 50,
+        "seuilAlerte": 2,
+        "categorie": "autre",
+        "dateAjout": "2025-05-18T19:22:06.830Z",
+        "addedBy": 1,
+        "licenceKey": "LIC-1-B21585D3"
       }
     ],
     "recettes": [
@@ -66,6 +77,19 @@
           "recetteId": 1,
           "recetteNom": "Recette avec Nouvel Ingrédient",
           "stockAvant": 10,
+          "user": 1
+        },
+        "licenceKey": "LIC-1-B21585D3"
+      },
+      {
+        "id": 3,
+        "productId": 2,
+        "type": "ajout",
+        "quantite": 1,
+        "date": "2025-05-18T19:22:06.832Z",
+        "details": {
+          "source": "ajout_manuel",
+          "prixUnitaire": 50,
           "user": 1
         },
         "licenceKey": "LIC-1-B21585D3"

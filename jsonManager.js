@@ -715,6 +715,26 @@ function getUserById(userId, licenceKey) {
   return users.users.find(user => user.id === userId && user.licenceKey === licenceKey);
 }
 
+
+function getStockAlerts(licenceKey) {
+  const data = loadData('main');
+
+  // Filtrer les éléments de stock appartenant à cette licence
+  const stockItems = (data.data.stock || []).filter(item => item.licenceKey === licenceKey);
+
+  // Détecter les alertes
+  const alertes = stockItems
+    .filter(item => item.quantite < item.seuilAlerte)
+    .map(item => ({
+      id: item.id,
+      nom: item.nom,
+      quantite: item.quantite,
+      seuilAlerte: item.seuilAlerte,
+      message: "Quantité en dessous du seuil d'alerte"
+    }));
+
+  return alertes;
+}
 // ==============================================
 // EXPORTS
 // ==============================================
@@ -738,6 +758,7 @@ module.exports = {
   addStockItem,
   updateStockItem,
   deleteStockItem,
+  getStockAlerts,
   checkStockAlerts,
 
   // Commandes

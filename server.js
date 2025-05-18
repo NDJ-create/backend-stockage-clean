@@ -36,6 +36,7 @@ const {
   deleteRecette,
   addVente,
   updateStockForOrder,
+  getStockAlerts,
   validerVente,
   addStaffMember,
   getUserById,
