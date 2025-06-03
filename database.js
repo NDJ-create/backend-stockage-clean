@@ -113,9 +113,15 @@ function saveData(fileKey, data) {
 
 // Générer un ID
 function generateId(items = []) {
-  return items.length > 0 ? Math.max(...items.map(item => item.id)) + 1 : 1;
+  try {
+    const ids = items
+      .map(item => parseInt(item.id))
+      .filter(id => !isNaN(id) && id >= 0);
+    return ids.length > 0 ? Math.max(...ids) + 1 : Date.now();
+  } catch {
+    return Date.now();
+  }
 }
-
 // Fonction pour mettre à jour le stock pour une commande
 function updateStockForOrder(ingredients, licenceKey) {
   const data = loadData('main');
@@ -174,6 +180,7 @@ function saveLicenceLogs(data) {
 
 // Exports
 module.exports = {
+  DATA_FILES,
   initDataStructure,
   loadData,
   saveData,
@@ -184,4 +191,3 @@ module.exports = {
   loadLicenceLogs,
   saveLicenceLogs
 };
-

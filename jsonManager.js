@@ -6,11 +6,10 @@ const {
 } = require('./database');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-
+const SECRET_KEY = process.env.SECRET_KEY;
 // ==============================================
 // CORE FUNCTIONS
 // ==============================================
-
 function logAction(action, details, licenceKey) {
   const data = loadData('main');
 
@@ -34,6 +33,11 @@ function logAction(action, details, licenceKey) {
     'USER_LICENCE_UPDATED': 'USER_UPDATE'
   };
 
+  // Vérifie que action est une chaîne de caractères
+  if (typeof action !== 'string') {
+    throw new Error('Action doit être une chaîne de caractères');
+  }
+
   const logEntry = {
     id: generateId(data.logs.actions),
     timestamp: new Date().toISOString(),
@@ -51,6 +55,7 @@ function logAction(action, details, licenceKey) {
 
   return logEntry;
 }
+
 
 // ==============================================
 // AUTHENTIFICATION
@@ -73,11 +78,10 @@ function generateAuthToken(user) {
       email: user.email,
       licenceKey: user.licenceKey || null
     },
-    process.env.SECRET_KEY || 'votre_cle_secrete_super_securisee',
+    SECRET_KEY,
     { expiresIn: '24h' }
   );
 }
-
 // ==============================================
 // USER MANAGEMENT
 // ==============================================
@@ -149,15 +153,13 @@ async function updateUserLicence(userId, licenceKey) {
 // ==============================================
 // STOCK MANAGEMENT
 // ==============================================
-
-function addStockItem(itemData, licenceKey) {
-  const data = loadData('main');
-
+function addStockItem(itemData, licenceKey, data) {
   const newItem = {
     id: generateId(data.data.stock),
     nom: itemData.nom,
-    quantite: parseInt(itemData.quantite) || 0,
+    quantite: parseFloat(itemData.quantite) || 0,
     prixAchat: parseFloat(itemData.prixAchat) || 0,
+    unite: itemData.unite || 'unité', // ✅ unité ajoutée ici
     seuilAlerte: parseInt(itemData.seuilAlerte) || 5,
     categorie: itemData.categorie || 'autre',
     dateAjout: new Date().toISOString(),
@@ -165,17 +167,10 @@ function addStockItem(itemData, licenceKey) {
     licenceKey
   };
 
+  // Ajouter dans le stock
   data.data.stock.push(newItem);
 
-  logAction('ADD_STOCK_ITEM', {
-    productId: newItem.id,
-    nom: newItem.nom,
-    quantite: newItem.quantite,
-    prixAchat: newItem.prixAchat,
-    categorie: newItem.categorie,
-    user: itemData.user || 'system'
-  }, licenceKey);
-
+  // Ajouter dans les mouvements
   data.data.mouvements.push({
     id: generateId(data.data.mouvements),
     productId: newItem.id,
@@ -190,7 +185,22 @@ function addStockItem(itemData, licenceKey) {
     licenceKey
   });
 
-  saveData('main', data);
+  // Ajouter dans l'historique (logs.actions)
+  data.logs.actions.push({
+    id: generateId(data.logs.actions),
+    timestamp: new Date().toISOString(),
+    action: 'ADD_STOCK_ITEM',
+    user: itemData.user || 'system',
+    licenceKey,
+    details: {
+      nom: newItem.nom,
+      quantite: newItem.quantite,
+      prixAchat: newItem.prixAchat,
+      unite: newItem.unite, // ✅ ajouté aussi dans les détails de logs
+      categorie: newItem.categorie
+    }
+  });
+
   return newItem;
 }
 
@@ -324,15 +334,21 @@ function addCommande(commandeData, licenceKey) {
   return newCommande;
 }
 
+
 function validerCommande(commandeId, userId = 'system', licenceKey) {
   const data = loadData('main');
 
+  // Sécurité structure
   if (!data.data.stock) data.data.stock = [];
   if (!data.data.mouvements) data.data.mouvements = [];
   if (!data.data.rapports) data.data.rapports = {};
   if (!data.data.rapports.depenses) data.data.rapports.depenses = [];
+  if (!data.logs) data.logs = {};
+  if (!data.logs.actions) data.logs.actions = [];
 
-  const commande = data.data.commandes.find(c => c.id === commandeId && c.licenceKey === licenceKey);
+  const commande = data.data.commandes.find(
+    c => c.id === commandeId && c.licenceKey === licenceKey
+  );
   if (!commande) {
     throw new Error(`Commande ${commandeId} non trouvée ou non autorisée`);
   }
@@ -341,12 +357,17 @@ function validerCommande(commandeId, userId = 'system', licenceKey) {
     throw new Error('Commande déjà validée');
   }
 
+  const now = new Date().toISOString();
   commande.statut = 'validée';
-  commande.dateValidation = new Date().toISOString();
+  commande.dateValidation = now;
   commande.validatedBy = userId;
 
+  const produitsAjoutes = [];
+
   commande.produits.forEach(produit => {
-    let stockItem = data.data.stock.find(item => item.nom === produit.nom && item.licenceKey === licenceKey);
+    let stockItem = data.data.stock.find(
+      item => item.nom === produit.nom && item.licenceKey === licenceKey
+    );
 
     if (!stockItem) {
       stockItem = {
@@ -356,7 +377,8 @@ function validerCommande(commandeId, userId = 'system', licenceKey) {
         prixAchat: produit.prixUnitaire,
         seuilAlerte: 5,
         categorie: 'nouveau',
-        dateAjout: new Date().toISOString(),
+        unite: produit.unite,
+        dateAjout: now,
         addedBy: userId,
         licenceKey: licenceKey
       };
@@ -366,21 +388,28 @@ function validerCommande(commandeId, userId = 'system', licenceKey) {
     const ancienStock = stockItem.quantite;
     stockItem.quantite += produit.quantite;
 
+    produitsAjoutes.push({
+      nom: produit.nom,
+      quantite: produit.quantite,
+      prixUnitaire: produit.prixUnitaire,
+      stockAvant: ancienStock,
+      stockApres: stockItem.quantite,
+      unite: produit.unite
+    });
+
     data.data.mouvements.push({
       id: generateId(data.data.mouvements),
       productId: stockItem.id,
       nom: stockItem.nom,
       type: 'réception_commande',
       quantite: produit.quantite,
-      date: new Date().toISOString(),
+      date: now,
       details: {
         commandeId: commande.id,
         fournisseur: commande.fournisseur,
         prixUnitaire: produit.prixUnitaire,
-        stockAvant: ancienStock,
-        user: userId
-      },
-      licenceKey: licenceKey
+        stockAvant: ancienStock
+      }
     });
   });
 
@@ -388,10 +417,27 @@ function validerCommande(commandeId, userId = 'system', licenceKey) {
     id: generateId(data.data.rapports.depenses),
     commandeId: commande.id,
     montant: commande.montant,
-    date: new Date().toISOString(),
+    date: now,
     fournisseur: commande.fournisseur,
     validatedBy: userId,
     licenceKey: licenceKey
+  });
+
+  // Import dynamique pour éviter la dépendance circulaire
+  const { getUserInfo } = require('./helpers');
+  const userInfo = getUserInfo(userId, licenceKey);
+
+  // 📜 Log de l'action
+  data.logs.actions.push({
+    id: generateId(data.logs.actions),
+    timestamp: now,
+    date: now,
+    licenceKey,
+    type: 'ORDER_VALIDATE',
+    action: `Commande ${commande.id} validée : ${produitsAjoutes.map(p => `${p.quantite} ${p.unite} de ${p.nom} à ${p.prixUnitaire}€/u`).join(', ')}`,
+    user: userInfo
+      ? { id: userInfo.id, role: userInfo.role }
+      : { id: userId, role: 'inconnu' }
   });
 
   saveData('main', data);
@@ -719,18 +765,16 @@ function getUserById(userId, licenceKey) {
 function getStockAlerts(licenceKey) {
   const data = loadData('main');
 
-  // Filtrer les éléments de stock appartenant à cette licence
   const stockItems = (data.data.stock || []).filter(item => item.licenceKey === licenceKey);
 
-  // Détecter les alertes
   const alertes = stockItems
-    .filter(item => item.quantite < item.seuilAlerte)
+    .filter(item => item.quantite <= item.seuilAlerte) // ✅ changement ici
     .map(item => ({
       id: item.id,
       nom: item.nom,
       quantite: item.quantite,
       seuilAlerte: item.seuilAlerte,
-      message: "Quantité en dessous du seuil d'alerte"
+      message: "Quantité égale ou en dessous du seuil d'alerte"
     }));
 
   return alertes;
@@ -765,7 +809,6 @@ module.exports = {
   addCommande,
   validerCommande,
   annulerCommande,
-
   // Recettes
   addRecette,
   addRecetteWithStockUpdate,
