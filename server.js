@@ -457,34 +457,30 @@ app.post('/api/login', licenceCheckMiddleware, async (req, res) => {
 app.post('/api/reset-password', licenceCheckMiddleware, async (req, res) => {
   try {
     const { email, newPassword, secretAnswer } = req.body;
-    
-    // Charge les données SYNCHRONES (comme avant)
-    const data = loadData();
-    
-    // Trouve l'utilisateur
-    const user = data.data.users.find(u => u.email === email);
+
+    const users = await loadData('users');
+
+    const user = users.find(u => u.email === email);
     if (!user || user.secretAnswer !== secretAnswer) {
-      return res.status(400).json({ 
-        error: 'Informations de réinitialisation invalides' 
+      return res.status(400).json({
+        error: 'Informations de réinitialisation invalides'
       });
     }
 
-    // Met à jour le mot de passe
-    user.passwordHash = await hashPassword(newPassword); // hashPassword reste async
-    
-    // Sauvegarde SYNCHRONE
-    saveData(data);
-    
+    user.passwordHash = await hashPassword(newPassword);
+
+    await saveData('users', users);
+
     res.json({ success: true });
+
   } catch (error) {
     console.error('Reset password error:', error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: error.message,
-      code: 'PASSWORD_RESET_FAILED' 
+      code: 'PASSWORD_RESET_FAILED'
     });
   }
 });
-
 // ===================== ROUTES SÉCURISÉES =====================
 app.post('/api/dashboard/licences/generate', authenticate, (req, res) => {
   try {

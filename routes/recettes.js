@@ -56,25 +56,36 @@ const parseRecipeData = (req, res, next) => {
 };
 
 // GET toutes les recettes
+// GET toutes les recettes (avec recherche possible par nom)
 router.get('/', authenticate, (req, res) => {
   console.log("DEBUG TOKEN:", req.user);
   console.log("DEBUG LICENCE:", req.licence);
 
   const licenceKey = req.licence?.key;
+  const searchTerm = req.query.search?.toLowerCase(); // <- récupère la recherche dans l'URL
+
   if (!licenceKey) {
-    return res.status(500).json({ error: "Licence introuvable dans le token." });
+    return res.status(500).json({ error: "Licence introuvable dans la requête." });
   }
 
   try {
-    // Chargement des données depuis main.json via la clé 'main'
+    // Chargement des données depuis le fichier main.json
     const data = loadData('main');
 
-    // Vérification des recettes dans les données chargées
+    // Récupération de toutes les recettes
     const recettes = data.data?.recettes || [];
 
-    // Filtrer les recettes qui correspondent à la licence de l'utilisateur
-    const recettesFiltrees = recettes.filter(r => r.licenceKey === licenceKey);
+    // Filtrage par licence
+    let recettesFiltrees = recettes.filter(r => r.licenceKey === licenceKey);
 
+    // Si un terme de recherche est fourni, on filtre aussi par nom de recette
+    if (searchTerm) {
+      recettesFiltrees = recettesFiltrees.filter(r =>
+        r.nom?.toLowerCase().includes(searchTerm)
+      );
+    }
+
+    // Renvoi des résultats filtrés
     res.json(recettesFiltrees);
 
   } catch (err) {
